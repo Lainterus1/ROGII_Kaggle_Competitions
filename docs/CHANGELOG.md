@@ -37,6 +37,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Created project-specific agent skills for data inventory, submission validation, leakage review, Kaggle runner workflow and experiment logging.
 - Implemented Step 07 vertical slice: data inventory CLI, RMSE metric, submission validator and last-known-`TVT_input` naive baseline.
 - Ignored local `.serena/` workspace metadata.
+- Created `docs/TASK_TEMPLATE.md` as the project-specific contract for future implementation tasks.
 
 ## Open questions
 

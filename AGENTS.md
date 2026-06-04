@@ -27,6 +27,7 @@ Your job is to build the best possible baseline without inventing data contracts
 | Architecture and boundaries | `docs/ARCHITECTURE.md` | Owns selected architecture and component responsibilities |
 | Accepted decisions | `docs/DECISIONS.md` | Add ADRs for meaningful decisions |
 | Current backlog | `docs/TASKS.md` | Keep actionable and current |
+| Task contract template | `docs/TASK_TEMPLATE.md` | Use for future implementation tasks |
 | Active risks | `docs/KNOWN_ISSUES.md` | Track blockers and unresolved concerns |
 | Data contract | `docs/DATA_MAP.md` | Update after real data inspection |
 | Metric contract | `docs/METRICS.md` | Update after official metric confirmation |
@@ -50,6 +51,8 @@ Your job is to build the best possible baseline without inventing data contracts
 3. Test: run relevant tests or scripts; explain skipped checks.
 4. Review: inspect diffs and ensure no data/artifacts/secrets are staged.
 5. Document: update source-of-truth docs when facts, decisions or risks changed.
+
+For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives a more specific contract.
 
 ## Architecture rules
 

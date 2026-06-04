@@ -52,6 +52,7 @@ Document ownership:
 | `docs/ARCHITECTURE.md` | Architecture, components, boundaries, runtime assumptions |
 | `docs/DECISIONS.md` | Accepted decisions and rationale |
 | `docs/TASKS.md` | Current backlog and next actions |
+| `docs/TASK_TEMPLATE.md` | Copy-paste contract for future implementation tasks |
 | `docs/CHANGELOG.md` | Chronological project changes |
 | `docs/KNOWN_ISSUES.md` | Known risks, blockers and unresolved issues |
 | `docs/DATA_MAP.md` | Data files, schema, target, IDs and leakage risks |
