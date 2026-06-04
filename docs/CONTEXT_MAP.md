@@ -74,4 +74,4 @@ Planned architecture locations:
 
 ## Open questions
 
-- Final agent instructions are pending Step 05.
+- None for current bootstrap navigation.

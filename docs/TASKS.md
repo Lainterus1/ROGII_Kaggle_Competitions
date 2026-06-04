@@ -30,7 +30,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Step 04: create project skeleton |
 | Done | High | Initialize local git and push bootstrap to `ROGII_Kaggle_Competitions` |
 | Done | High | Step 05: create final `AGENTS.md` |
-| Pending | Medium | Step 06: create reusable project-specific agent skills |
+| Done | Medium | Step 06: create reusable project-specific agent skills |
 | Pending | High | Step 07: implement first vertical slice |
 | Pending | Medium | Step 08: create task contract template |
 | Pending | Medium | Step 09: create documentation maintenance policy |
