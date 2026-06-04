@@ -1,0 +1,25 @@
+run:
+  name: baseline_lgbm
+  type: model_baseline
+  seed: 42
+  environment: local
+
+paths:
+  config: configs/paths.local.yaml.example
+
+model:
+  type: lightgbm
+  params:
+    objective: regression
+    learning_rate: 0.05
+    n_estimators: 1000
+    random_state: 42
+
+features:
+  set_name: safe_numeric_v1
+  columns: TBD_after_data_inspection
+
+validation:
+  strategy: group_kfold_if_group_available
+  n_splits: 5
+  group_column: TBD

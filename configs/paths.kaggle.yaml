@@ -1,0 +1,5 @@
+data_dir: /kaggle/input/rogii-wellbore-geology-prediction
+output_dir: /kaggle/working
+model_dir: /kaggle/working/models
+submission_dir: /kaggle/working
+mlflow_tracking_uri: /kaggle/working/mlruns

@@ -1,0 +1,5 @@
+data_dir: ./data/raw/rogii-wellbore-geology-prediction
+output_dir: ./outputs
+model_dir: ./models
+submission_dir: ./submissions
+mlflow_tracking_uri: ./mlruns

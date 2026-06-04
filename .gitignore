@@ -1,0 +1,40 @@
+# Kaggle data and runtime artifacts
+data/
+outputs/
+models/
+submissions/
+mlruns/
+
+# Common large or generated ML files
+*.csv
+*.parquet
+*.feather
+*.pkl
+*.joblib
+*.model
+*.cbm
+*.lgb
+*.xgb
+
+# Secrets
+kaggle.json
+.env
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

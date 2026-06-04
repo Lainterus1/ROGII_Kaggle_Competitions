@@ -1,0 +1,21 @@
+run:
+  name: baseline_naive
+  type: naive
+  seed: 42
+  environment: local
+
+paths:
+  config: configs/paths.local.yaml.example
+
+model:
+  type: constant
+  strategy: median
+
+features:
+  set_name: none
+  columns: []
+
+validation:
+  strategy: pending_data_inspection
+  n_splits: 5
+  group_column: TBD
