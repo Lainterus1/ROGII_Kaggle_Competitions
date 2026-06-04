@@ -29,7 +29,13 @@ def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False
     groups: list[int] = []
     well_index = 0
 
-    for well_id in list_well_ids(data_dir, "train"):
+    well_ids = list_well_ids(data_dir, "train")
+    total = len(well_ids)
+    print(f"[1/3] Loading {total} train wells ...")
+
+    for i, well_id in enumerate(well_ids):
+        if (i + 1) % 100 == 0:
+            print(f"  {i + 1}/{total} wells loaded, {len(targets)} rows collected")
         horizontal = read_horizontal_well(data_dir, "train", well_id)
         if "TVT" not in horizontal.columns:
             continue
@@ -56,6 +62,7 @@ def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False
     if not features_list:
         raise ValueError("No train post-PS data found")
 
+    print(f"  Done: {well_index} wells, {len(targets)} post-PS rows")
     X = pd.concat(features_list, ignore_index=True)
     y = np.array(targets, dtype=float)
     g = np.array(groups, dtype=int)
@@ -83,10 +90,12 @@ def run_train(
     }
     params.update(model_params)
 
+    print(f"[2/3] Training {n_splits}-fold GroupKFold CV on {len(y)} rows ...")
     cv = GroupKFold(n_splits=n_splits)
     cv_scores: list[float] = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y, groups)):
+        print(f"  Fold {fold_idx + 1}/{n_splits} ...")
         X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_tr, y_val = y[train_idx], y[val_idx]
 
@@ -95,7 +104,9 @@ def run_train(
         y_pred = model.predict(X_val)
         score = rmse(y_val, y_pred)
         cv_scores.append(score)
+        print(f"  Fold {fold_idx + 1} RMSE: {score:.6f}")
 
+    print(f"[3/3] Training final model on all data ...")
     final_model = LGBMRegressor(**params)
     final_model.fit(X, y)
 
