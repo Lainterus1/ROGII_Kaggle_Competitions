@@ -44,7 +44,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Removed `steps/` folder and `ROGII_PROJECT_INTAKE_DOSSIER.md`; moved remaining domain terms into `docs/PROJECT_CONTEXT.md`.
 - Implemented Stage 3 ML baseline: LightGBM with GroupKFold CV (safe numeric features only, no TVT_input). CV RMSE 120.06, valid submission generated.
 - Implemented Stage 4 ML baseline: added last_tvt_input as well-level constant feature. CV RMSE improved to 20.84 (5.8x improvement).
-- Filled Kaggle thin runner notebook with actual cells (clone → install → train → predict).
+- Switched Kaggle notebook to offline mode: uses `rogii-repo` Kaggle Dataset instead of git clone. Works with Internet OFF.
 
 ## Open questions
 
