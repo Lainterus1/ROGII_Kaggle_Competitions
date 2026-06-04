@@ -70,3 +70,10 @@ Stage 4 ML baseline result (with last_tvt_input well-level constant):
 
 - Is LightGBM available in the target Kaggle environment or must it be installed?
 - Can rolling/lag GR features or typewell alignment close the remaining gap to the naive baseline?
+
+Kaggle run:
+
+- Notebook: `notebooks/00_kaggle_thin_runner.ipynb`
+- Workflow: clone repo → install deps → run train → run predict
+- Data: `/kaggle/input/rogii-wellbore-geology-prediction`
+- Output: `/kaggle/working/submission.csv`
