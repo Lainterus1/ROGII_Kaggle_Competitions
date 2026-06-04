@@ -56,6 +56,7 @@ Document ownership:
 | `docs/CHANGELOG.md` | Chronological project changes |
 | `docs/KNOWN_ISSUES.md` | Known risks, blockers and unresolved issues |
 | `docs/DATA_MAP.md` | Data files, schema, target, IDs and leakage risks |
+| `docs/HOW_IT_WORKS.md` | Beginner-friendly explanation of the model, features and pipeline |
 | `docs/METRICS.md` | Official metric and local implementation |
 | `docs/VALIDATION_STRATEGY.md` | Validation design and leakage checks |
 | `docs/BASELINE_PLAN.md` | Baseline stages and acceptance criteria |

@@ -27,8 +27,9 @@ Initial baseline sequence:
 
 1. Valid submission baseline: last-known-`TVT_input` prediction to test submission contract. Status: done in Step 07.
 2. Naive local baseline: last-known-`TVT_input` rule evaluated on train post-PS rows. Status: done in Step 07.
-3. First ML baseline: LightGBM using safe numeric features available in train and test. Status: done.
-4. Stronger baseline later: depth features, rolling/lag features, spatial/typewell features, CatBoost/XGBoost comparison and ensemble.
+3. First ML baseline: LightGBM using safe numeric features (no TVT_input). Status: done. RMSE 120.06.
+4. Stronger baseline: LightGBM + last_tvt_input well-level constant. Status: done. CV 20.58, LB 24.11.
+5. Next: rolling/lag GR features, typewell alignment, CatBoost/XGBoost, ensemble.
 
 Acceptance criteria for first useful baseline:
 

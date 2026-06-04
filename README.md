@@ -76,6 +76,7 @@ python scripts/run_train.py --config configs/baseline_lgbm.yaml --env local
 - `docs/CONTEXT_MAP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
+- `docs/HOW_IT_WORKS.md` — как работает модель (для новичков)
 
 ## Данные и артефакты
 
