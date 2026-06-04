@@ -79,6 +79,12 @@ Review and optimization protocol:
 | `docs/REVIEW_CHECKLIST.md` | Concise checklist and optimization boundaries |
 | `AGENTS.md` | High-level review protocol rules |
 
+Handoff and context compaction:
+
+| Location | Owns |
+|---|---|
+| `.agents/skills/handoff/SKILL.md` | Handoff format, produce and resume procedures |
+
 Planned architecture locations:
 
 | Path | Purpose |
