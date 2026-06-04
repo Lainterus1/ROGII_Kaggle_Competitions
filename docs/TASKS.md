@@ -33,7 +33,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | Medium | Step 06: create reusable project-specific agent skills |
 | Done | High | Step 07: implement data inventory, RMSE metric, submission validator and naive baseline |
 | Done | Medium | Step 08: create task contract template |
-| Pending | Medium | Step 09: create documentation maintenance policy |
+| Done | Medium | Step 09: create documentation maintenance policy |
 | Pending | Medium | Step 10: create review and optimization protocol |
 | Pending | Medium | Step 11: create handoff and context compaction |
 

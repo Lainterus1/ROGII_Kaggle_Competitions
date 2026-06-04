@@ -108,10 +108,33 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 | New blocker or risk | `docs/KNOWN_ISSUES.md` |
 | Project structure change | `docs/CONTEXT_MAP.md`, `docs/CHANGELOG.md` |
 
+## Documentation update rules
+
+### Update docs when
+
+- Data schema, metric, validation, architecture, configuration, public behavior or project-specific contracts change.
+- A known limitation appears or is resolved.
+- An architectural decision is accepted.
+- A baseline stage or experiment result changes project status.
+
+### Do not update docs when
+
+- The change is internal implementation cleanup with no contract impact.
+- The change is pure formatting, test-only refactoring or temporary debugging.
+- The removed code was dead and had no user-visible or operational impact.
+
+### Update style
+
+- Update the smallest relevant section.
+- Do not duplicate information across docs.
+- Prefer tables for contracts and ADR entries for decisions.
+- Keep changelog entries factual and short.
+- If no documentation update is needed, explain why in the completion report.
+
 ## Skills policy
 
 - Create project-specific skills only for workflows likely to repeat at least three times or to protect high-risk actions.
-- Useful skill candidates: data inventory, submission validation, Kaggle runner workflow, MLflow experiment logging and leakage review.
+- Useful skill candidates: data inventory, submission validation, Kaggle runner workflow, MLflow experiment logging, leakage review and documentation maintenance.
 - Skills live under `.agents/skills/*/SKILL.md`.
 - Do not create generic skills that duplicate this file.
 
@@ -129,9 +152,9 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 
 ## Unknown commands or paths
 
-- Official Kaggle metric: `TBD` until confirmed from official sources.
-- Full data contract: `TBD` until data inventory is implemented and run.
-- Final baseline run commands: partially scaffolded, but scripts are placeholders until the vertical slice is implemented.
+- Kaggle Evaluation page wording: still needs cross-check when accessible.
+- Full feature contract: still needs deeper inventory and leakage review before first ML baseline.
+- Model training commands: scaffolded but not implemented yet.
 
 ## Completion report format
 

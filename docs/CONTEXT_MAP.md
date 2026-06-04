@@ -62,6 +62,14 @@ Document ownership:
 | `docs/EXPERIMENT_LOG.md` | Human-readable experiment history |
 | `docs/PUBLIC_NOTEBOOK_REFERENCES.md` | Reviewed public notebooks and reused ideas |
 
+Documentation maintenance policy:
+
+| Location | Owns |
+|---|---|
+| `AGENTS.md` | Concise documentation update rules and completion-report requirements |
+| `.agents/skills/documentation-maintenance/SKILL.md` | Detailed documentation maintenance workflow and update matrix |
+| `docs/TASK_TEMPLATE.md` | Per-task documentation impact section |
+
 Planned architecture locations:
 
 | Path | Purpose |

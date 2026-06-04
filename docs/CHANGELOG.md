@@ -38,6 +38,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Implemented Step 07 vertical slice: data inventory CLI, RMSE metric, submission validator and last-known-`TVT_input` naive baseline.
 - Ignored local `.serena/` workspace metadata.
 - Created `docs/TASK_TEMPLATE.md` as the project-specific contract for future implementation tasks.
+- Created documentation maintenance policy in `AGENTS.md` and `.agents/skills/documentation-maintenance/SKILL.md`.
 
 ## Open questions
 
