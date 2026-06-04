@@ -1,4 +1,4 @@
-data_dir: /kaggle/input/rogii-wellbore-geology-prediction
+data_dir: /kaggle/input/competitions/rogii-wellbore-geology-prediction
 output_dir: /kaggle/working
 model_dir: /kaggle/working/models
 submission_dir: /kaggle/working
