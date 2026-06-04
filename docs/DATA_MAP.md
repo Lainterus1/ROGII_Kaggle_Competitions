@@ -24,7 +24,7 @@ File inventory, row counts, column names, dtypes, missing values, unique counts,
 
 ## Current content
 
-Data has been lightly inspected from local files under `data/`. Full inventory is still pending implementation.
+Data inventory has been implemented and run locally with `python scripts/make_data_inventory.py --data-dir data`.
 
 Observed local structure:
 
@@ -33,13 +33,15 @@ Observed local structure:
 | `data/train/` | Train well files, including `*_horizontal_well.csv`, `*_typewell.csv` and `.png` files |
 | `data/test/` | Test well files, including `*_horizontal_well.csv` and `*_typewell.csv` |
 | `data/sample_submission.csv` | Submission template |
-| `data/AI_wellbore_geology_prediction_task_en.pptx` | Task presentation deck |
+| `data/AI_wellbore_geology_prediction_task_en.pptx` | Task presentation deck; confirms prediction task and RMSE metric |
 
 Observed counts from quick inspection:
 
 | Item | Count |
 |---|---:|
+| Total files | 2327 |
 | Total CSV files | 1553 |
+| PNG files | 773 |
 | Train CSV files | 1546 |
 | Test CSV files | 6 |
 | Sample submission rows | 14151 |
@@ -69,26 +71,31 @@ Observed example test typewell columns from `data/test/000d7d20__typewell.csv`:
 
 Preliminary data contract notes:
 
-- Target/prediction column appears to be `tvt` in submission and `TVT` in train horizontal files, but the official metric and target definition still need confirmation.
-- File prefix such as `000d7d20` is a likely well/group identifier candidate.
-- `TVT_input` appears in both train and test horizontal files and must be leakage-audited before feature use.
+- Target/prediction column is `tvt` in submission and `TVT` in train horizontal files.
+- File prefix such as `000d7d20` is the well/group identifier candidate for validation and loading.
+- `TVT_input` appears in both train and test horizontal files.
+- Task deck states `TVT_input` contains known geology values until Prediction Start (PS); values after PS are missing and must not be used as labels/features.
+- Sample submission IDs encode `<well_id>_<row_index>` and point to post-PS rows in the corresponding test horizontal file.
 
-Expected first inventory checks:
+Inventory checks implemented:
 
 - File list and sizes.
 - Row counts.
 - Column names and dtypes.
-- Missing values.
 - Unique counts for likely IDs.
 - Target column confirmation.
 - Submission schema from `sample_submission.csv`.
-- Train/test overlap checks.
 - Group/well identifier candidates.
 - Depth/order column candidates.
 - Possible leakage columns.
 
+Still pending deeper inventory checks:
+
+- Full missing-value profile by column.
+- Train/test overlap diagnostics beyond file-prefix observations.
+- Typewell alignment contract details.
+
 ## Open questions
 
-- What is the official metric?
 - Is `TVT_input` a permitted input feature or a leakage-adjacent column?
 - Which column should be used for group-aware validation?

@@ -35,6 +35,8 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Added `.gitattributes` to keep repository text files normalized to LF.
 - Initialized local git repository and pushed bootstrap commits to public GitHub repo.
 - Created project-specific agent skills for data inventory, submission validation, leakage review, Kaggle runner workflow and experiment logging.
+- Implemented Step 07 vertical slice: data inventory CLI, RMSE metric, submission validator and last-known-`TVT_input` naive baseline.
+- Ignored local `.serena/` workspace metadata.
 
 ## Open questions
 

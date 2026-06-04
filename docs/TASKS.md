@@ -31,7 +31,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Initialize local git and push bootstrap to `ROGII_Kaggle_Competitions` |
 | Done | High | Step 05: create final `AGENTS.md` |
 | Done | Medium | Step 06: create reusable project-specific agent skills |
-| Pending | High | Step 07: implement first vertical slice |
+| Done | High | Step 07: implement data inventory, RMSE metric, submission validator and naive baseline |
 | Pending | Medium | Step 08: create task contract template |
 | Pending | Medium | Step 09: create documentation maintenance policy |
 | Pending | Medium | Step 10: create review and optimization protocol |
@@ -39,5 +39,5 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 
 ## Open questions
 
-- What is the official Kaggle metric?
-- What is the exact final data contract after full inventory?
+- What missing-value patterns matter for first ML features?
+- How should typewell data be aligned safely?

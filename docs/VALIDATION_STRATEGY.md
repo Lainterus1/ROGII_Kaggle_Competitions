@@ -34,6 +34,14 @@ Preliminary group candidate after light data inspection:
 - Use the file prefix before `__horizontal_well.csv` or `__typewell.csv` as the initial well/group ID candidate.
 - Confirm this during full data inventory before finalizing folds.
 
+Step 07 naive validation:
+
+- Evaluate the last-known-`TVT_input` rule on train post-PS rows.
+- Prediction for each train well is the final non-null `TVT_input` before PS.
+- Target rows are rows after PS where `TVT_input` is missing and `TVT` is known.
+- This is a sanity baseline, not the final model CV strategy.
+- Result from local run: RMSE `15.909853` over `3,783,989` post-PS rows across `773` train wells.
+
 Required checks:
 
 - No group appears in both train and validation folds.
@@ -43,6 +51,5 @@ Required checks:
 
 ## Open questions
 
-- Which column is the correct validation group?
-- Should file prefix be materialized as an explicit `well_id` column during loading?
+- Should file prefix be materialized as an explicit `well_id` column during all loading paths?
 - How many folds are appropriate for available wells/groups?

@@ -1,8 +1,5 @@
-"""Schema contracts for target, IDs and submission columns.
+"""Schema constants confirmed from local data and task deck inspection."""
 
-Values remain unknown until official Kaggle files are inspected.
-"""
-
-TARGET_COLUMN = "TBD_after_data_inspection"
-ID_COLUMN = "TBD_after_data_inspection"
-PREDICTION_COLUMN = "TBD_after_data_inspection"
+TARGET_COLUMN = "TVT"
+ID_COLUMN = "id"
+PREDICTION_COLUMN = "tvt"

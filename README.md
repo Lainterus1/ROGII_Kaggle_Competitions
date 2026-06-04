@@ -33,13 +33,14 @@ Bootstrap проекта в процессе.
 - Skeleton source-of-truth документации.
 - Начальное решение по balanced-архитектуре.
 - Начальный skeleton проекта.
+- Data inventory CLI.
+- Submission validator.
+- Naive last-known-`TVT_input` baseline.
 
 Еще не готово:
 
-- Инспекция Kaggle-данных.
-- Подтверждение официальной метрики.
-- Подтверждение submission-контракта.
-- Naive/model baselines.
+- First ML baseline.
+- MLflow model run logging.
 
 ## Планируемая установка
 
@@ -49,17 +50,22 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## Планируемые команды
+## Команды
 
-Эти команды являются placeholders до реализации пайплайна на следующих шагах:
+Реализованные команды:
 
 ```bash
 pytest tests/
-python scripts/make_data_inventory.py --config configs/paths.local.yaml.example
+python scripts/make_data_inventory.py --data-dir data
+python scripts/run_naive_baseline.py --data-dir data --output outputs/submission.csv
+python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
+```
+
+Планируемые команды для следующих шагов:
+
+```bash
 python scripts/run_smoke.py --config configs/baseline_lgbm.yaml
-python scripts/run_naive_baseline.py --config configs/baseline_naive.yaml
 python scripts/run_train.py --config configs/baseline_lgbm.yaml --env local
-python scripts/validate_submission.py --submission outputs/submission.csv
 ```
 
 ## Документация
