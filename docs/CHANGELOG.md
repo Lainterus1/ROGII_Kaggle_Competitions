@@ -39,6 +39,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Ignored local `.serena/` workspace metadata.
 - Created `docs/TASK_TEMPLATE.md` as the project-specific contract for future implementation tasks.
 - Created documentation maintenance policy in `AGENTS.md` and `.agents/skills/documentation-maintenance/SKILL.md`.
+- Created review and optimization protocol in `.agents/skills/code-review/SKILL.md` and `docs/REVIEW_CHECKLIST.md`.
 
 ## Open questions
 

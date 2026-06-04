@@ -28,6 +28,7 @@ Your job is to build the best possible baseline without inventing data contracts
 | Accepted decisions | `docs/DECISIONS.md` | Add ADRs for meaningful decisions |
 | Current backlog | `docs/TASKS.md` | Keep actionable and current |
 | Task contract template | `docs/TASK_TEMPLATE.md` | Use for future implementation tasks |
+| Review checklist | `docs/REVIEW_CHECKLIST.md` | Use for task/diff/PR reviews |
 | Active risks | `docs/KNOWN_ISSUES.md` | Track blockers and unresolved concerns |
 | Data contract | `docs/DATA_MAP.md` | Update after real data inspection |
 | Metric contract | `docs/METRICS.md` | Update after official metric confirmation |
@@ -73,6 +74,13 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 - Avoid heavy dependencies unless the user approves or the baseline requires them.
 - Document non-obvious leakage or validation decisions close to the code and in docs.
 - Keep generated submissions and model artifacts out of Git.
+
+## Review and optimization protocol
+
+- Use `.agents/skills/code-review/SKILL.md` and `docs/REVIEW_CHECKLIST.md` for meaningful task, diff or PR reviews.
+- Findings come before summaries and should be ordered by severity.
+- Optimize only measured or clearly risky paths; do not perform broad refactors during review.
+- Do not change public contracts, architecture or validation strategy without explicit rationale and docs updates.
 
 ## Data and leakage rules
 

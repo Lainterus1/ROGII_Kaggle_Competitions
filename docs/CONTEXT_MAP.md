@@ -53,6 +53,7 @@ Document ownership:
 | `docs/DECISIONS.md` | Accepted decisions and rationale |
 | `docs/TASKS.md` | Current backlog and next actions |
 | `docs/TASK_TEMPLATE.md` | Copy-paste contract for future implementation tasks |
+| `docs/REVIEW_CHECKLIST.md` | Review criteria, optimization boundaries and refactoring approval rules |
 | `docs/CHANGELOG.md` | Chronological project changes |
 | `docs/KNOWN_ISSUES.md` | Known risks, blockers and unresolved issues |
 | `docs/DATA_MAP.md` | Data files, schema, target, IDs and leakage risks |
@@ -69,6 +70,14 @@ Documentation maintenance policy:
 | `AGENTS.md` | Concise documentation update rules and completion-report requirements |
 | `.agents/skills/documentation-maintenance/SKILL.md` | Detailed documentation maintenance workflow and update matrix |
 | `docs/TASK_TEMPLATE.md` | Per-task documentation impact section |
+
+Review and optimization protocol:
+
+| Location | Owns |
+|---|---|
+| `.agents/skills/code-review/SKILL.md` | Detailed review workflow and findings format |
+| `docs/REVIEW_CHECKLIST.md` | Concise checklist and optimization boundaries |
+| `AGENTS.md` | High-level review protocol rules |
 
 Planned architecture locations:
 
