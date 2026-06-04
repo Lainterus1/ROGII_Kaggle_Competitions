@@ -21,7 +21,7 @@ Your job is to build the best possible baseline without inventing data contracts
 
 | Need | File | Notes |
 |---|---|---|
-| Original intake and constraints | `ROGII_PROJECT_INTAKE_DOSSIER.md` | Read first when context is unclear |
+| Original intake and constraints | `docs/PROJECT_CONTEXT.md` | Read first when context is unclear |
 | Current project goal and constraints | `docs/PROJECT_CONTEXT.md` | Owns goals, users, success criteria and non-goals |
 | Navigation and doc ownership | `docs/CONTEXT_MAP.md` | Use to find the right source-of-truth file |
 | Architecture and boundaries | `docs/ARCHITECTURE.md` | Owns selected architecture and component responsibilities |

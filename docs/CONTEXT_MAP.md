@@ -26,13 +26,12 @@ Documentation ownership boundaries, agent reading order and location map for key
 
 Recommended reading order for future agents:
 
-1. `ROGII_PROJECT_INTAKE_DOSSIER.md` for original project intake.
-2. `docs/PROJECT_CONTEXT.md` for current project goal, constraints and success criteria.
-3. `docs/CONTEXT_MAP.md` for navigation and document ownership.
-4. `docs/ARCHITECTURE.md` for selected architecture and component boundaries.
-5. `docs/DECISIONS.md` for accepted decisions.
-6. `docs/TASKS.md` for current backlog.
-7. `AGENTS.md` after it is created in Step 05.
+1. `docs/PROJECT_CONTEXT.md` for project goal, constraints, domain terms and success criteria.
+2. `docs/CONTEXT_MAP.md` for navigation and document ownership.
+3. `docs/ARCHITECTURE.md` for selected architecture and component boundaries.
+4. `docs/DECISIONS.md` for accepted decisions.
+5. `docs/TASKS.md` for current backlog.
+6. `AGENTS.md` after it is created in Step 05.
 
 Repository and runtime locations:
 

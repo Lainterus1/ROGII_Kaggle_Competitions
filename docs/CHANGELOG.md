@@ -41,6 +41,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Created documentation maintenance policy in `AGENTS.md` and `.agents/skills/documentation-maintenance/SKILL.md`.
 - Created review and optimization protocol in `.agents/skills/code-review/SKILL.md` and `docs/REVIEW_CHECKLIST.md`.
 - Created handoff and context compaction skill in `.agents/skills/handoff/SKILL.md`.
+- Removed `steps/` folder and `ROGII_PROJECT_INTAKE_DOSSIER.md`; moved remaining domain terms into `docs/PROJECT_CONTEXT.md`.
 
 ## Open questions
 

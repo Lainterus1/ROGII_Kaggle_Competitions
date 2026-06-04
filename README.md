@@ -72,7 +72,6 @@ python scripts/run_train.py --config configs/baseline_lgbm.yaml --env local
 
 Сначала читать:
 
-- `ROGII_PROJECT_INTAKE_DOSSIER.md`
 - `docs/PROJECT_CONTEXT.md`
 - `docs/CONTEXT_MAP.md`
 - `docs/ARCHITECTURE.md`

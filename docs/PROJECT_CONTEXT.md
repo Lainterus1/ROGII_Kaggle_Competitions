@@ -137,6 +137,18 @@ Public clone command:
 - Do not optimize only for public leaderboard.
 - Do not commit raw data, secrets, trained models or large artifacts.
 
+## Domain terms
+
+| Term | Meaning |
+|---|---|
+| Wellbore | The physical drilled path of a well. Each wellbore contains many depth-indexed measurement rows. |
+| Horizontal well | A well that turns horizontally through a geological formation. The horizontal section is the primary prediction target. |
+| TVT | True Vertical Thickness or a related target describing vertical position/thickness relative to geological layers. |
+| Typewell / reference well | A reference well with known geological interpretation, used to infer geology around horizontal wells. |
+| Gamma ray (GR) | A common well log measurement useful for identifying lithology and geological layer changes. |
+| MD (measured depth) | Distance measured along the wellbore trajectory. |
+| TVD (true vertical depth) | Vertical depth from surface/reference point to a point in the well. |
+
 ## Initial assumptions
 
 - Current stage is initial bootstrap.
