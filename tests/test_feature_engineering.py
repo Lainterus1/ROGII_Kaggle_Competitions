@@ -4,8 +4,10 @@ import pytest
 
 from rogii.features import (
     SAFE_NUMERIC_FEATURES,
+    WITH_TVT_INPUT_FEATURES,
     build_features,
     get_feature_set_name,
+    last_known_tvt_input_value,
     post_ps_mask,
 )
 
@@ -101,3 +103,36 @@ def test_post_ps_mask_all_missing() -> None:
 
 def test_get_feature_set_name() -> None:
     assert get_feature_set_name() == "safe_numeric_v1"
+
+
+def test_last_known_tvt_input_value() -> None:
+    frame = _make_well(10)
+    result = last_known_tvt_input_value(frame)
+    assert result == frame.loc[4, "TVT_input"]
+
+
+def test_last_known_tvt_input_missing_column() -> None:
+    frame = pd.DataFrame({"MD": [1, 2, 3]})
+    result = last_known_tvt_input_value(frame)
+    assert np.isnan(result)
+
+
+def test_build_features_with_tvt_input() -> None:
+    frame = _make_well(10)
+    features = build_features(frame, include_tvt_input=True)
+    assert list(features.columns) == WITH_TVT_INPUT_FEATURES
+    assert "last_tvt_input" in features.columns
+    expected = last_known_tvt_input_value(frame)
+    assert (features["last_tvt_input"] == expected).all()
+
+
+def test_build_features_without_tvt_input() -> None:
+    frame = _make_well(10)
+    features = build_features(frame, include_tvt_input=False)
+    assert list(features.columns) == SAFE_NUMERIC_FEATURES
+    assert "last_tvt_input" not in features.columns
+
+
+def test_feature_columns_match_constants() -> None:
+    assert len(WITH_TVT_INPUT_FEATURES) == len(SAFE_NUMERIC_FEATURES) + 1
+    assert WITH_TVT_INPUT_FEATURES[-1] == "last_tvt_input"

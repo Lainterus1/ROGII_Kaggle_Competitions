@@ -57,7 +57,16 @@ Stage 3 ML baseline result (without TVT_input):
 - Generated submission rows: `14,151`, passed validator
 - Pure geometric baseline deliberately excludes TVT_input; RMSE gap vs naive (15.91 → 120.06) shows TVT_input dominance
 
+Stage 4 ML baseline result (with last_tvt_input well-level constant):
+
+- Script: `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-tvt-input`
+- Model: LightGBM, 10 numeric features (+ last_tvt_input: last known pre-PS TVT_input value per well)
+- CV RMSE (mean ± std): `20.84 ± 3.24`
+- Train rows (post-PS): `3,783,989`, wells: `773`
+- Generated submission rows: `14,151`, passed validator
+- Adding TVT_input as a well-level constant improved RMSE 5.8x (120.06 → 20.84), only 5 points above naive baseline
+
 ## Open questions
 
 - Is LightGBM available in the target Kaggle environment or must it be installed?
-- Should TVT_input be re-introduced as a well-level feature for Stage 4?
+- Can rolling/lag GR features or typewell alignment close the remaining gap to the naive baseline?

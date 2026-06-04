@@ -16,8 +16,9 @@ model:
     random_state: 42
 
 features:
-  set_name: safe_numeric_v1
-  columns: [MD, X, Y, Z, GR, GR_is_missing, MD_delta, MD_relative, row_position]
+  set_name: with_tvt_input
+  columns: [MD, X, Y, Z, GR, GR_is_missing, MD_delta, MD_relative, row_position, last_tvt_input]
+  include_tvt_input: true
 
 validation:
   strategy: group_kfold

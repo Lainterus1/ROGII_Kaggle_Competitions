@@ -16,6 +16,7 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--n-splits", type=int, default=5, help="Number of GroupKFold splits")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--output-model", default="models/baseline_lgbm.pkl", help="Path for saved model")
+    parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     return parser
 
 
@@ -28,6 +29,7 @@ def main() -> None:
         data_dir=args.data_dir,
         n_splits=args.n_splits,
         seed=args.seed,
+        include_tvt_input=args.include_tvt_input,
     )
 
     with open(args.output_model, "wb") as f:

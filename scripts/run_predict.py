@@ -17,6 +17,7 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--data-dir", default="data", help="Competition data directory")
     parser.add_argument("--model", default="models/baseline_lgbm.pkl", help="Path to trained model")
     parser.add_argument("--output", default="outputs/submission.csv", help="Path for generated submission")
+    parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     return parser
 
 
@@ -28,7 +29,7 @@ def main() -> None:
     with open(args.model, "rb") as f:
         model = pickle.load(f)
 
-    submission = run_predict(args.data_dir, model)
+    submission = run_predict(args.data_dir, model, include_tvt_input=args.include_tvt_input)
     submission.to_csv(output, index=False)
 
     result = validate_submission(sample_submission_path(args.data_dir), output)

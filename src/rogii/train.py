@@ -23,7 +23,7 @@ class TrainResult:
     train_wells: int
 
 
-def _collect_train_post_ps(data_dir: str | Path) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     features_list: list[pd.DataFrame] = []
     targets: list[float] = []
     groups: list[int] = []
@@ -37,7 +37,7 @@ def _collect_train_post_ps(data_dir: str | Path) -> tuple[pd.DataFrame, np.ndarr
         if not mask.any():
             continue
 
-        feats = build_features(horizontal)
+        feats = build_features(horizontal, include_tvt_input=include_tvt_input)
         post_feats = feats.loc[mask].copy()
         post_target = horizontal.loc[mask, "TVT"].astype(float)
 
@@ -67,8 +67,9 @@ def run_train(
     n_splits: int = 5,
     seed: int = 42,
     model_params: dict | None = None,
+    include_tvt_input: bool = False,
 ) -> TrainResult:
-    X, y, groups = _collect_train_post_ps(data_dir)
+    X, y, groups = _collect_train_post_ps(data_dir, include_tvt_input=include_tvt_input)
 
     if model_params is None:
         model_params = {}

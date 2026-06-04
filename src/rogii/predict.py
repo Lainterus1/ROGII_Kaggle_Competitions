@@ -11,7 +11,7 @@ from rogii.features import build_features, post_ps_mask
 from rogii.models import parse_submission_id
 
 
-def run_predict(data_dir: str | Path, model: LGBMRegressor) -> pd.DataFrame:
+def run_predict(data_dir: str | Path, model: LGBMRegressor, include_tvt_input: bool = False) -> pd.DataFrame:
     sample = read_sample_submission(data_dir)
     if list(sample.columns) != ["id", "tvt"]:
         raise ValueError(f"Unexpected sample submission columns: {list(sample.columns)}")
@@ -23,7 +23,7 @@ def run_predict(data_dir: str | Path, model: LGBMRegressor) -> pd.DataFrame:
         well_id, row_index = parse_submission_id(submission_id)
         if well_id not in well_cache:
             horizontal = read_horizontal_well(data_dir, "test", well_id)
-            feats = build_features(horizontal)
+            feats = build_features(horizontal, include_tvt_input=include_tvt_input)
             well_cache[well_id] = feats
         feats = well_cache[well_id]
         if row_index < 0 or row_index >= len(feats):
