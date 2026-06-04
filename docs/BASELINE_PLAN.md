@@ -66,14 +66,12 @@ Stage 4 ML baseline result (with last_tvt_input well-level constant):
 - Generated submission rows: `14,151`, passed validator
 - Adding TVT_input as a well-level constant improved RMSE 5.8x (120.06 → 20.84), only 5 points above naive baseline
 
-## Open questions
+Kaggle run (2026-06-05):
 
-- Is LightGBM available in the target Kaggle environment or must it be installed?
-- Can rolling/lag GR features or typewell alignment close the remaining gap to the naive baseline?
-
-Kaggle run:
-
-- Notebook: `notebooks/00_kaggle_thin_runner.ipynb`
-- Workflow: clone repo → install deps → run train → run predict
-- Data: `/kaggle/input/rogii-wellbore-geology-prediction`
+- Notebook: `notebooks/00_kaggle_thin_runner.ipynb` (offline, uses `rogii-repo` Kaggle Dataset)
+- Workflow: copy dataset → cd → run train → run predict
+- Data: `/kaggle/input/competitions/rogii-wellbore-geology-prediction`
 - Output: `/kaggle/working/submission.csv`
+- Kaggle CV RMSE: `20.58 ± 3.99` (5 folds, 3.78M rows, 773 wells)
+- Official LB RMSE: `24.114`
+- LB/CV gap: `+3.5` (reasonable for Kaggle)

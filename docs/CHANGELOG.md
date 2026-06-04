@@ -45,6 +45,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Implemented Stage 3 ML baseline: LightGBM with GroupKFold CV (safe numeric features only, no TVT_input). CV RMSE 120.06, valid submission generated.
 - Implemented Stage 4 ML baseline: added last_tvt_input as well-level constant feature. CV RMSE improved to 20.84 (5.8x improvement).
 - Switched Kaggle notebook to offline mode: uses `rogii-repo` Kaggle Dataset instead of git clone. Works with Internet OFF.
+- First Kaggle submission: Stage 4 LightGBM + last_tvt_input. Official LB RMSE: 24.114 (CV: 20.58). Recorded in `docs/EXPERIMENT_LOG.md`.
 
 ## Open questions
 
