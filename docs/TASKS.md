@@ -28,7 +28,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Step 02: create source-of-truth documentation skeletons |
 | Done | High | Step 03: select initial architecture and record ADR |
 | Done | High | Step 04: create project skeleton |
-| In progress | High | Initialize local git and push bootstrap to `ROGII_Kaggle_Competitions` |
+| Done | High | Initialize local git and push bootstrap to `ROGII_Kaggle_Competitions` |
 | Done | High | Step 05: create final `AGENTS.md` |
 | Pending | Medium | Step 06: create reusable project-specific agent skills |
 | Pending | High | Step 07: implement first vertical slice |

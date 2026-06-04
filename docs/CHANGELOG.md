@@ -33,6 +33,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Recorded public GitHub repository, Kaggle runtime setup and light local data observations.
 - Replaced temporary `AGENTS.md` with final project-specific operating contract.
 - Added `.gitattributes` to keep repository text files normalized to LF.
+- Initialized local git repository and pushed bootstrap commits to public GitHub repo.
 
 ## Open questions
 
