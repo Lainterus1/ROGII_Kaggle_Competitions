@@ -42,6 +42,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Created review and optimization protocol in `.agents/skills/code-review/SKILL.md` and `docs/REVIEW_CHECKLIST.md`.
 - Created handoff and context compaction skill in `.agents/skills/handoff/SKILL.md`.
 - Removed `steps/` folder and `ROGII_PROJECT_INTAKE_DOSSIER.md`; moved remaining domain terms into `docs/PROJECT_CONTEXT.md`.
+- Implemented Stage 3 ML baseline: LightGBM with GroupKFold CV (safe numeric features only, no TVT_input). CV RMSE 120.06, valid submission generated.
 
 ## Open questions
 

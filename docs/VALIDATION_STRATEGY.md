@@ -42,6 +42,14 @@ Step 07 naive validation:
 - This is a sanity baseline, not the final model CV strategy.
 - Result from local run: RMSE `15.909853` over `3,783,989` post-PS rows across `773` train wells.
 
+Stage 3 ML validation:
+
+- Strategy: GroupKFold (n_splits=5) by well_id on post-PS train rows.
+- Features: MD, X, Y, Z, GR, GR_is_missing, MD_delta, MD_relative, row_position.
+- TVT_input deliberately excluded to measure pure geometric baseline strength.
+- Target: TVT column.
+- Result: CV RMSE `120.06 ± 11.31` (5 folds) over `3,783,989` post-PS rows across `773` wells.
+
 Required checks:
 
 - No group appears in both train and validation folds.
