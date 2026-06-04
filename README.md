@@ -1,47 +1,47 @@
 # ROGII Kaggle Competitions
 
-Reproducible baseline project for the Kaggle competition `ROGII - Wellbore Geology Prediction`.
+Воспроизводимый baseline-проект для Kaggle-соревнования `ROGII - Wellbore Geology Prediction`.
 
-Competition page: <https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/overview>
+Страница соревнования: <https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/overview>
 
-GitHub repository: <https://github.com/Lainterus1/ROGII_Kaggle_Competitions>
+GitHub-репозиторий: <https://github.com/Lainterus1/ROGII_Kaggle_Competitions>
 
-## Goal
+## Цель
 
-Build a strong, reproducible baseline that can run locally on small samples and on Kaggle for full-data execution and manual submission generation.
+Построить сильный и воспроизводимый baseline, который можно запускать локально на небольших выборках и на Kaggle для полного прогона по данным и ручной генерации submission-файла.
 
-## Workflow
+## Рабочий процесс
 
-1. Develop locally.
-2. Store code, configs and docs in GitHub repo `ROGII_Kaggle_Competitions`.
-3. Execute full-data runs on Kaggle using thin runners.
-4. Manually submit validated `submission.csv` after user approval.
+1. Разрабатывать локально.
+2. Хранить код, конфиги и документацию в GitHub-репозитории `ROGII_Kaggle_Competitions`.
+3. Запускать полные прогоны на Kaggle через тонкие runner-скрипты/ноутбуки.
+4. Отправлять проверенный `submission.csv` вручную после подтверждения пользователя.
 
-Public clone command:
+Команда для публичного клонирования:
 
 ```bash
 git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 ```
 
-## Current status
+## Текущий статус
 
-Bootstrap in progress.
+Bootstrap проекта в процессе.
 
-Completed:
+Готово:
 
-- Project context document.
-- Source-of-truth documentation skeletons.
-- Initial balanced architecture decision.
-- Initial project skeleton.
+- Документ с контекстом проекта.
+- Skeleton source-of-truth документации.
+- Начальное решение по balanced-архитектуре.
+- Начальный skeleton проекта.
 
-Not completed yet:
+Еще не готово:
 
-- Kaggle data inspection.
-- Official metric confirmation.
-- Submission contract confirmation.
+- Инспекция Kaggle-данных.
+- Подтверждение официальной метрики.
+- Подтверждение submission-контракта.
 - Naive/model baselines.
 
-## Planned setup
+## Планируемая установка
 
 ```bash
 python -m venv .venv
@@ -49,9 +49,9 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## Planned commands
+## Планируемые команды
 
-These commands are placeholders until the pipeline is implemented in later steps:
+Эти команды являются placeholders до реализации пайплайна на следующих шагах:
 
 ```bash
 pytest tests/
@@ -62,9 +62,9 @@ python scripts/run_train.py --config configs/baseline_lgbm.yaml --env local
 python scripts/validate_submission.py --submission outputs/submission.csv
 ```
 
-## Documentation
+## Документация
 
-Read these first:
+Сначала читать:
 
 - `ROGII_PROJECT_INTAKE_DOSSIER.md`
 - `docs/PROJECT_CONTEXT.md`
@@ -72,8 +72,8 @@ Read these first:
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
 
-## Data and artifacts
+## Данные и артефакты
 
-Do not commit Kaggle data, secrets, trained models, submissions or MLflow artifact stores. Runtime files belong in ignored directories such as `data/`, `outputs/`, `models/`, `submissions/` and `mlruns/`.
+Не коммитить Kaggle-данные, секреты, обученные модели, submissions или MLflow artifact stores. Runtime-файлы должны находиться в игнорируемых директориях: `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`.
 
-Local data is expected under `data/`. Kaggle data is expected under `/kaggle/input`; Kaggle outputs should be written to `/kaggle/working`.
+Локальные данные ожидаются в `data/`. Kaggle-данные ожидаются в `/kaggle/input`; outputs на Kaggle нужно записывать в `/kaggle/working`.
