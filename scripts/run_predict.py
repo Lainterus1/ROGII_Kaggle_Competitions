@@ -21,8 +21,12 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     parser.add_argument("--include-geometry", action="store_true", help="Include geometry features relative to Prediction Start")
     parser.add_argument("--include-gr", action="store_true", help="Include GR-derived rolling/lag/envelope features")
+    parser.add_argument("--include-gr-dwt", action="store_true", help="Include causal GR DWT (wavelet) features")
     parser.add_argument("--include-trajectory", action="store_true", help="Include 3D trajectory kinematics features (automatically includes geometry)")
     parser.add_argument("--include-typewell", action="store_true", help="Include typewell-reference GR residual and summary features")
+    parser.add_argument("--include-spatial", action="store_true", help="Include OOF spatial KNN features (pre-PS TVT_input only)")
+    parser.add_argument("--include-dtw", action="store_true", help="Include DTW typewell alignment features")
+    parser.add_argument("--include-geology", action="store_true", help="Include formation geology features from typewell")
     parser.add_argument("--residual-target", action="store_true", help="Model predicts TVT delta; reconstruct TVT at prediction time")
     return parser
 
@@ -41,8 +45,12 @@ def main() -> None:
             include_tvt_input=args.include_tvt_input,
             include_geometry=args.include_geometry,
             include_gr=args.include_gr,
+            include_gr_dwt=args.include_gr_dwt,
             include_trajectory=args.include_trajectory,
             include_typewell=args.include_typewell,
+            include_spatial=args.include_spatial,
+            include_dtw=args.include_dtw,
+            include_geology=args.include_geology,
         ),
         cli_residual_target=args.residual_target,
     )
@@ -54,8 +62,12 @@ def main() -> None:
         include_tvt_input=flags["include_tvt_input"],
         include_geometry=flags["include_geometry"],
         include_gr=flags["include_gr"],
+        include_gr_dwt=flags["include_gr_dwt"],
         include_trajectory=flags["include_trajectory"],
         include_typewell=flags["include_typewell"],
+        include_spatial=flags["include_spatial"],
+        include_dtw=flags["include_dtw"],
+        include_geology=flags["include_geology"],
         residual_target=contract.residual_target,
         feature_columns=contract.feature_columns,
     )

@@ -30,13 +30,18 @@ def _collect_train_post_ps(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_gr_dwt: bool = False,
     include_trajectory: bool = False,
     include_typewell: bool = False,
+    include_spatial: bool = False,
+    include_dtw: bool = False,
+    include_geology: bool = False,
     residual_target: bool = False,
-) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, list[str]]:
     features_list: list[pd.DataFrame] = []
     targets: list[float] = []
     groups: list[int] = []
+    well_ids_used: list[str] = []
     well_index = 0
 
     well_ids = list_well_ids(data_dir, "train")
@@ -57,16 +62,19 @@ def _collect_train_post_ps(
 
         last_tvt = last_known_tvt_input_value(horizontal)
 
-        typewell_frame = read_typewell(data_dir, "train", well_id) if include_typewell else None
+        typewell_frame = read_typewell(data_dir, "train", well_id) if (include_typewell or include_dtw or include_geology) else None
 
         feats = build_features(
             horizontal,
             include_tvt_input=use_tvt_feature,
             include_geometry=include_geometry,
             include_gr=include_gr,
+            include_gr_dwt=include_gr_dwt,
             include_trajectory=include_trajectory,
             typewell=typewell_frame,
             include_typewell=include_typewell,
+            include_dtw=include_dtw,
+            include_geology=include_geology,
         )
         post_feats = feats.loc[mask].copy()
         post_target = horizontal.loc[mask, "TVT"].astype(float)
@@ -86,6 +94,7 @@ def _collect_train_post_ps(
         features_list.append(post_feats)
         targets.extend(post_target.tolist())
         groups.extend([well_index] * len(post_feats))
+        well_ids_used.append(well_id)
         well_index += 1
 
     if not features_list:
@@ -95,7 +104,20 @@ def _collect_train_post_ps(
     X = pd.concat(features_list, ignore_index=True)
     y = np.array(targets, dtype=float)
     g = np.array(groups, dtype=int)
-    return X, y, g
+    return X, y, g, well_ids_used
+
+
+def _spatial_fold_features(
+    data_dir: str | Path,
+    X_base: pd.DataFrame,
+    row_mask: np.ndarray,
+    oof_well_ids: list[str],
+) -> pd.DataFrame:
+    """Build spatial KNN features for masked rows using OOF wells as reference."""
+    from rogii.spatial_features import build_pre_ps_reference, build_spatial_knn_features
+    ref = build_pre_ps_reference(data_dir, "train", oof_well_ids)
+    query = X_base.loc[row_mask, ["X", "Y", "Z"]]
+    return build_spatial_knn_features(ref, query)
 
 
 def run_train(
@@ -106,17 +128,25 @@ def run_train(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_gr_dwt: bool = False,
     include_trajectory: bool = False,
     include_typewell: bool = False,
+    include_spatial: bool = False,
+    include_dtw: bool = False,
+    include_geology: bool = False,
     residual_target: bool = False,
 ) -> TrainResult:
-    X, y, groups = _collect_train_post_ps(
+    X, y, groups, well_ids_used = _collect_train_post_ps(
         data_dir,
         include_tvt_input=include_tvt_input,
         include_geometry=include_geometry,
         include_gr=include_gr,
+        include_gr_dwt=include_gr_dwt,
         include_trajectory=include_trajectory,
         include_typewell=include_typewell,
+        include_spatial=include_spatial,
+        include_dtw=include_dtw,
+        include_geology=include_geology,
         residual_target=residual_target,
     )
 
@@ -138,8 +168,17 @@ def run_train(
 
     for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y, groups)):
         print(f"  Fold {fold_idx + 1}/{n_splits} ...")
-        X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
+        X_tr = X.iloc[train_idx].copy()
+        X_val = X.iloc[val_idx].copy()
         y_tr, y_val = y[train_idx], y[val_idx]
+
+        if include_spatial:
+            val_groups = set(groups[val_idx])
+            oof_wells = [wid for g, wid in enumerate(well_ids_used) if g not in val_groups]
+            X_tr_spatial = _spatial_fold_features(data_dir, X, train_idx, oof_wells)
+            X_val_spatial = _spatial_fold_features(data_dir, X, val_idx, oof_wells)
+            X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_spatial.reset_index(drop=True)], axis=1)
+            X_val = pd.concat([X_val.reset_index(drop=True), X_val_spatial.reset_index(drop=True)], axis=1)
 
         model = LGBMRegressor(**params)
         model.fit(X_tr, y_tr)
@@ -149,6 +188,12 @@ def run_train(
         print(f"  Fold {fold_idx + 1} RMSE: {score:.6f}")
 
     print(f"[3/3] Training final model on all data ...")
+    if include_spatial:
+        from rogii.spatial_features import build_pre_ps_reference, build_spatial_knn_features
+        ref = build_pre_ps_reference(data_dir, "train", well_ids_used)
+        spatial_feats = build_spatial_knn_features(ref, X[["X", "Y", "Z"]])
+        X = pd.concat([X, spatial_feats], axis=1)
+
     final_model = LGBMRegressor(**params)
     final_model.fit(X, y)
 

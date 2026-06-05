@@ -27,16 +27,16 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|
-| Stage | R1 optimized |
+| Stage | **A2a** (DWT) |
 | Model | LightGBM |
-| Features | 18 features: 6 base + 9 geometry + 3 GR |
+| Features | **20 features**: 6 base + 9 geometry + 3 GR + 2 DWT |
 | Target | `residual = TVT - last_tvt_input` |
 | Validation | 5-fold `GroupKFold` by well |
-| Local/Kaggle CV | RMSE `~14.19` |
-| Public LB | RMSE `12.247` |
+| Local CV | RMSE `14.13 ± 0.77` |
+| Public LB | pending |
 | Explanation | `docs/HOW_IT_WORKS.md` |
 
-The Stage 4 baseline remains frozen as the historical reference baseline in `docs/BASELINE_PLAN.md`. R1 optimized is the active comparison point for new work. The old pending model-upgrade roadmap is superseded by the staged plan below.
+Tabular feature ceiling confirmed at CV ~14.13. All subsequent feature blocks (spatial KNN, DTW, target engineering, geology v1/v2) produced flat or degraded CV. Active development focus shifts to architectural improvements (CNN, ensemble).
 
 ## Guiding constraints
 
@@ -116,126 +116,62 @@ Code remaining in repo (`TRAJECTORY_FEATURES`, `build_trajectory_features()`, `i
 
 ## Stage A2: GR DWT and Strict OOF Spatial KNN
 
+Status: **Partially promoted.** A2a (DWT) promoted (+0.06 CV). A2b (spatial KNN) not promoted (flat CV, −0.02 vs R1). No leakage detected in either block.
+
 Goal: extract deeper GR structure and add safe inter-well spatial context without target leakage.
 
-### Stage A2a: Causal GR DWT
+### Stage A2a: Causal GR DWT — **Promoted**
+
+CV: 14.13 (R1: 14.19, +0.06). Runtime: ~1.4 min full train.
 
 Feature scope:
 
-- Add approved dependency `PyWavelets`.
-- `gr_dwt_approx`: low-frequency GR approximation.
-- `gr_dwt_detail_energy`: trailing-window detail energy.
-
-Implementation notes:
-
-- Use causal or expanding/trailing windows only. Feature value at row `i` must not depend on `GR` after `i` unless a later ADR explicitly allows full-test-log context for this feature family.
-- First run a runtime spike on a small subset before full CV.
-- If DWT is too slow on full data, keep it as a diagnostic branch and do not promote.
+- Added dependency `PyWavelets`.
+- `gr_dwt_approx`: low-frequency GR approximation via trailing-window DWT (db4, window=256).
+- `gr_dwt_detail_energy`: mean squared detail coefficient energy from same window.
+- Causal only: feature at row `i` depends only on `GR[0:i+1]` (verified by test).
 
 Primary files:
 
-- `requirements.txt`
-- `src/rogii/features.py` or new `src/rogii/gr_features.py`
-- `tests/test_feature_engineering.py`
-- `tests/test_no_target_leakage.py`
+- `requirements.txt` — added `pywavelets`
+- `src/rogii/gr_dwt.py` — new module
+- `src/rogii/features.py` — `GR_DWT_FEATURES` constant, `build_gr_dwt_features()` integration
+- `src/rogii/model_io.py` — `include_gr_dwt` flag
+- `tests/test_feature_engineering.py` — 8 DWT tests including causal verification
+- `configs/a2_lgbm.yaml` — DWT config
 
-### Stage A2b: Strict OOF Spatial KNN
+### Stage A2b: Strict OOF Spatial KNN — **Not promoted (flat CV)**
 
-Feature scope:
+CV: 14.21 (R1: 14.19, −0.02). No leakage (CV not implausibly low). Spatial features add no new signal beyond what X/Y/Z coordinates already encode for LightGBM.
 
-- Build KNN features for `k = 5`, `10`, `50` in 3D space.
-- Add `spatial_nn{k}_mean_tvt`, `spatial_nn{k}_median_tvt`, `spatial_nn{k}_std_tvt`.
+Feature scope implemented:
 
-OOF contract:
+- KNN for `k = 5`, `10`, `50` in 3D space using `sklearn.neighbors.NearestNeighbors` (ball_tree).
+- `spatial_nn{k}_mean_tvt`, `spatial_nn{k}_median_tvt`, `spatial_nn{k}_std_tvt`.
+- Reference: pre-PS rows from other wells, `TVT_input` only.
 
-- For validation fold K, build the reference tree only from wells outside fold K.
+OOF contract (all verified by tests):
+
+- For validation fold K, reference tree built only from wells outside fold K.
 - Reference rows are only pre-PS rows.
 - Reference target is pre-PS known `TVT_input`, not post-PS `TVT`.
-- Validation wells must never appear in their own spatial reference tree.
-- Test-time tree uses train pre-PS reference rows only by default; test pre-PS rows are excluded for a stricter train/test contract.
+- Validation wells never appear in their own spatial reference tree.
+- Test-time tree uses all train pre-PS rows.
 
 Primary files:
 
-- New `src/rogii/spatial_features.py`
-- `src/rogii/train.py`
-- `src/rogii/predict.py`
-- `src/rogii/validation.py`
-- `tests/test_spatial_oof.py`
-- `tests/test_no_target_leakage.py`
-
-Verification:
-
-- Tests prove validation groups are excluded from the tree.
-- Tests prove post-PS target rows are excluded from the reference set.
-- Tests prove target column `TVT` is not used to build reference values.
-- Full CV must be inspected for suspicious leakage.
-
-Rollback rule:
-
-- If CV drops to an implausibly low range such as RMSE `2-3`, stop immediately, do not submit, disable the spatial block and audit OOF construction.
-
-Promotion gate:
-
-- Promote only if OOF leakage tests pass, CV improvement is plausible, and Kaggle LB does not show a severe CV/LB mismatch after manual submission.
+- `src/rogii/spatial_features.py` — new module
+- `src/rogii/train.py` — fold-aware spatial feature building
+- `src/rogii/predict.py` — `_run_predict_with_spatial`
+- `tests/test_spatial_oof.py` — 9 tests including OOF leakage checks
 
 ## Stage A3: DTW Typewell Alignment and Target Engineering
 
-Goal: revisit typewell information with elastic alignment and address residual-target flattening risk.
+Status: **Rejected.** All three sub-stages degraded CV vs A2a (14.13).
 
-Prerequisite:
-
-- Before implementation starts, create a clean rollback checkpoint after tests pass. Commit only after explicit user approval.
-
-### Stage A3a: Typewell DTW Features
-
-Feature scope:
-
-- Align horizontal `GR` to typewell `GR` with Dynamic Time Warping or a Viterbi-style constrained path.
-- Add `dtw_optimal_tvt` as an anchor-depth feature.
-- Add `dtw_cost_cumulative` as a path-cost feature.
-
-Rules:
-
-- Do not use raw DTW output as the final answer.
-- Do not use train post-PS `TVT` to guide alignment.
-- Keep Typewell V1 rejected unless a new alignment approach beats R1/A-stage baselines.
-
-Primary files:
-
-- New `src/rogii/typewell_alignment.py`
-- `src/rogii/features.py`
-- `src/rogii/train.py`
-- `src/rogii/predict.py`
-- `tests/test_dtw_features.py`
-- `tests/test_no_target_leakage.py`
-
-### Stage A3b: Target Engineering
-
-Options to evaluate separately:
-
-- Signed-log residual: `sign(x) * log1p(abs(x))` with inverse transform before TVT-scale RMSE.
-- Parallel derivative model: predict `d(TVT)/d(MD)` and combine with residual prediction.
-
-Primary files:
-
-- New `src/rogii/target.py`
-- `src/rogii/train.py`
-- `src/rogii/predict.py`
-- `tests/test_target_transforms.py`
-
-Verification:
-
-- Always report RMSE in reconstructed TVT scale, not only transformed target space.
-- Compare OOF prediction variance against OOF target variance.
-- Inspect per-well prediction dispersion to detect flattening.
-
-Rollback rule:
-
-- If predicted TVT curves lose dispersion or TVT-scale RMSE degrades, revert to the plain residual target.
-
-Promotion gate:
-
-- Promote DTW and target changes only if they improve TVT-scale CV and do not create flattening, leakage or unacceptable runtime.
+- A3a DTW: CV 14.63 (+0.50). Median GR cross-correlation 0.43 — insufficient signal. Code kept in `src/rogii/typewell_alignment.py`.
+- A3b.1 Signed-log: CV 14.64 (+0.51). Residuals not heavy-tailed (bounded ±40, skew 0.74).
+- A3b.2 Derivative model: CV 14.32 (+0.19). Integration error accumulation negates any slope-prediction benefit.
 
 ## Stage A4: Structural Blending and Pipeline-Dependent Models
 
@@ -290,7 +226,15 @@ Promotion gate:
 | Idea | Status | Reason |
 |---|---|---|
 | Simple Typewell V1 anchor residuals | Rejected | CV degraded and features were mostly `GR - const` redundancy |
+| Trajectory features (A1) | Rejected | r >= 0.99 with geometry features, CV flat, LB worse |
+| Spatial KNN (A2b) | Not promoted | Flat CV (−0.02), no leakage, code kept |
+| DTW typewell alignment (A3a) | Rejected | CV +0.50, GR cross-correlation only 0.43 |
+| Signed-log target (A3b.1) | Rejected | CV +0.51, residuals not heavy-tailed |
+| Derivative target (A3b.2) | Rejected | CV +0.19, integration error accumulation |
+| Geology v1 well-level (A4) | Rejected | CV +0.44, signal unstable across folds |
+| Geology v2 per-row (A4) | Not promoted | CV −0.04 flat, code kept |
 | Public saved artifacts / TabICL artifact stack | Rejected for clean mainline | Opaque external artifacts and heavy dependency path |
-| Exact train/test coordinate overlap blend | Rejected for clean mainline | High leakage risk; may be studied only as a separate diagnostic with explicit approval |
-| Particle filters | Deferred | Complex and stochastic; revisit only after A1-A4 evidence |
-| 1D CNN | Optional | Requires separate runtime/dependency approval after tabular ensemble |
+| Exact train/test coordinate overlap blend | Rejected for clean mainline | High leakage risk; diagnostics only |
+| Particle filters | Deferred | Complex and stochastic |
+| **1D CNN sequence model** | **Deferred for A4+** | Architecture diversity, not feature; revisit after tabular ceiling |
+| **Multi-seed LGBM + CatBoost + stacking** | **Deferred for A4+** | Cosmetic ensemble on same features |

@@ -4,6 +4,7 @@ import pytest
 
 from rogii.features import (
     GEOMETRY_FEATURES,
+    GR_DWT_FEATURES,
     GR_FEATURES,
     SAFE_NUMERIC_FEATURES,
     TRAJECTORY_FEATURES,
@@ -451,3 +452,79 @@ def test_trajectory_features_constants() -> None:
     assert "tortuosity_window_50" in TRAJECTORY_FEATURES
     assert "sin_azimuth" in TRAJECTORY_FEATURES
     assert "cos_azimuth" in TRAJECTORY_FEATURES
+
+
+def test_gr_dwt_features_constants() -> None:
+    assert isinstance(GR_DWT_FEATURES, list)
+    assert len(GR_DWT_FEATURES) == 2
+    assert GR_DWT_FEATURES[0] == "gr_dwt_approx"
+    assert GR_DWT_FEATURES[1] == "gr_dwt_detail_energy"
+
+
+def test_gr_dwt_features_columns() -> None:
+    from rogii.gr_dwt import build_gr_dwt_features
+    frame = _make_well(100)
+    feats = build_gr_dwt_features(frame, window=64, min_window=8)
+    assert list(feats.columns) == GR_DWT_FEATURES
+    assert len(feats) == 100
+
+
+def test_gr_dwt_features_no_nan() -> None:
+    from rogii.gr_dwt import build_gr_dwt_features
+    frame = _make_well(100)
+    feats = build_gr_dwt_features(frame, window=64, min_window=8)
+    assert not feats.isna().any().any()
+
+
+def test_gr_dwt_causal_no_future_leak() -> None:
+    from rogii.gr_dwt import build_gr_dwt_features
+    frame = _make_well(200)
+    feats = build_gr_dwt_features(frame, window=64, min_window=8)
+
+    gr_original = frame["GR"].astype(float).values.copy()
+    for i in range(50, 150):
+        original = feats.loc[i, "gr_dwt_approx"]
+        gr_modified = gr_original.copy()
+        gr_modified[i + 1:] = 9999.0
+        frame2 = frame.copy()
+        frame2["GR"] = gr_modified
+        feats2 = build_gr_dwt_features(frame2, window=64, min_window=8)
+        assert feats2.loc[i, "gr_dwt_approx"] == original
+
+
+def test_gr_dwt_single_row() -> None:
+    from rogii.gr_dwt import build_gr_dwt_features
+    frame = _make_well(1)
+    feats = build_gr_dwt_features(frame, window=64, min_window=8)
+    assert len(feats) == 1
+    assert not feats.isna().any().any()
+    assert feats.loc[0, "gr_dwt_approx"] == frame.loc[0, "GR"]
+    assert feats.loc[0, "gr_dwt_detail_energy"] == 0.0
+
+
+def test_gr_dwt_fallback_for_short_segments() -> None:
+    from rogii.gr_dwt import build_gr_dwt_features
+    n = 20
+    frame = _make_well(n)
+    feats = build_gr_dwt_features(frame, window=256, min_window=32)
+    for i in range(n):
+        assert feats.loc[i, "gr_dwt_detail_energy"] == 0.0
+    gr = frame["GR"].astype(float).values
+    assert np.allclose(feats["gr_dwt_approx"].values, gr)
+
+
+def test_build_features_with_gr_dwt() -> None:
+    frame = _make_well(50)
+    features = build_features(frame, include_gr_dwt=True, dwt_window=32, dwt_min_window=8)
+    expected_cols = SAFE_NUMERIC_FEATURES + GR_DWT_FEATURES
+    assert list(features.columns) == expected_cols
+    assert "gr_dwt_approx" in features.columns
+    assert "gr_dwt_detail_energy" in features.columns
+
+
+def test_build_features_r1_plus_dwt() -> None:
+    frame = _make_well(50)
+    features = build_features(frame, include_geometry=True, include_gr=True, include_gr_dwt=True,
+                             dwt_window=32, dwt_min_window=8)
+    expected_cols = SAFE_NUMERIC_FEATURES + GEOMETRY_FEATURES + GR_FEATURES + GR_DWT_FEATURES
+    assert list(features.columns) == expected_cols

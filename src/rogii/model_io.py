@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_trajectory", "include_typewell")
+FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_trajectory", "include_typewell", "include_gr_dwt", "include_spatial", "include_dtw", "include_geology")
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,10 @@ def make_feature_flags(
     include_gr: bool = False,
     include_trajectory: bool = False,
     include_typewell: bool = False,
+    include_gr_dwt: bool = False,
+    include_spatial: bool = False,
+    include_dtw: bool = False,
+    include_geology: bool = False,
 ) -> dict[str, bool]:
     """Return normalized feature flags stored in model payloads."""
     return {
@@ -32,6 +36,10 @@ def make_feature_flags(
         "include_gr": bool(include_gr),
         "include_trajectory": bool(include_trajectory),
         "include_typewell": bool(include_typewell),
+        "include_gr_dwt": bool(include_gr_dwt),
+        "include_spatial": bool(include_spatial),
+        "include_dtw": bool(include_dtw),
+        "include_geology": bool(include_geology),
     }
 
 
@@ -78,6 +86,10 @@ def build_model_payload(
         "include_gr": flags["include_gr"],
         "include_trajectory": flags["include_trajectory"],
         "include_typewell": flags["include_typewell"],
+        "include_gr_dwt": flags["include_gr_dwt"],
+        "include_spatial": flags["include_spatial"],
+        "include_dtw": flags["include_dtw"],
+        "include_geology": flags["include_geology"],
     }
 
 
@@ -145,6 +157,10 @@ def _payload_feature_flags(payload: dict[str, Any]) -> dict[str, bool]:
         include_gr=stored.get("include_gr", payload.get("include_gr", False)),
         include_trajectory=stored.get("include_trajectory", payload.get("include_trajectory", False)),
         include_typewell=stored.get("include_typewell", payload.get("include_typewell", False)),
+        include_gr_dwt=stored.get("include_gr_dwt", payload.get("include_gr_dwt", False)),
+        include_spatial=stored.get("include_spatial", payload.get("include_spatial", False)),
+        include_dtw=stored.get("include_dtw", payload.get("include_dtw", False)),
+        include_geology=stored.get("include_geology", payload.get("include_geology", False)),
     )
 
 

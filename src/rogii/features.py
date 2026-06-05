@@ -45,6 +45,28 @@ TRAJECTORY_FEATURES = [
     "cos_azimuth",
 ]
 
+GR_DWT_FEATURES = [
+    "gr_dwt_approx",
+    "gr_dwt_detail_energy",
+]
+
+DTW_FEATURES = [
+    "dtw_optimal_tvt",
+    "dtw_cost_cumulative",
+]
+
+GEOLOGY_FEATURES = [
+    "geol_gr_zscore_egfdl",
+    "geol_gr_zscore_buda",
+    "geol_gr_zscore_mnss",
+    "geol_gr_zscore_egfdu",
+    "geol_gr_zscore_astnl",
+    "geol_gr_zscore_lthl",
+    "geol_gr_zscore_ltgt",
+    "geol_gr_zscore_clayrich",
+    "geol_gr_zscore_roll20",
+]
+
 TYPEWELL_OFFSETS = [-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80]
 
 TYPEWELL_FEATURES = (
@@ -280,10 +302,15 @@ def build_typewell_features(horizontal: pd.DataFrame, typewell: pd.DataFrame,
 
 def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
                    include_geometry: bool = False, include_gr: bool = False,
+                   include_gr_dwt: bool = False,
                    include_trajectory: bool = False,
                    typewell: pd.DataFrame | None = None,
                    include_typewell: bool = False,
-                   typewell_summary_only: bool = False) -> pd.DataFrame:
+                   include_dtw: bool = False,
+                   include_geology: bool = False,
+                   typewell_summary_only: bool = False,
+                   dwt_window: int = 256,
+                   dwt_min_window: int = 16) -> pd.DataFrame:
     """Build numeric features from a horizontal well DataFrame.
 
     The input DataFrame must contain at minimum: MD, X, Y, Z, GR.
@@ -293,6 +320,7 @@ def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
     are added. When include_trajectory=True, trajectory kinematics features
     are added and geometry features are automatically included.
     When include_gr=True, GR-derived rolling/lag/energy/envelope features are added.
+    When include_gr_dwt=True, causal GR DWT (wavelet) features are added.
     When include_typewell=True, typewell-reference residual and summary features
     are added. Requires a typewell DataFrame.
     When typewell_summary_only=True, only summary features are built (no residuals).
@@ -330,9 +358,24 @@ def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
         gr_feats = build_gr_features(horizontal)
         features = pd.concat([features, gr_feats], axis=1)
 
+    if include_gr_dwt:
+        from rogii.gr_dwt import build_gr_dwt_features
+        gr_dwt_feats = build_gr_dwt_features(horizontal, window=dwt_window, min_window=dwt_min_window)
+        features = pd.concat([features, gr_dwt_feats], axis=1)
+
     if include_typewell and typewell is not None:
         tw_feats = build_typewell_features(horizontal, typewell, summary_only=typewell_summary_only)
         features = pd.concat([features, tw_feats], axis=1)
+
+    if include_dtw and typewell is not None:
+        from rogii.typewell_alignment import build_dtw_features
+        dtw_feats = build_dtw_features(horizontal, typewell)
+        features = pd.concat([features, dtw_feats], axis=1)
+
+    if include_geology and typewell is not None:
+        from rogii.geology_features import build_geology_features
+        geo_feats = build_geology_features(horizontal, typewell)
+        features = pd.concat([features, geo_feats], axis=1)
 
     return features
 

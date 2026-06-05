@@ -23,8 +23,12 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     parser.add_argument("--include-geometry", action="store_true", help="Include geometry features relative to Prediction Start")
     parser.add_argument("--include-gr", action="store_true", help="Include GR-derived rolling/lag/envelope features")
+    parser.add_argument("--include-gr-dwt", action="store_true", help="Include causal GR DWT (wavelet) features")
     parser.add_argument("--include-trajectory", action="store_true", help="Include 3D trajectory kinematics features (automatically includes geometry)")
     parser.add_argument("--include-typewell", action="store_true", help="Include typewell-reference GR residual and summary features")
+    parser.add_argument("--include-spatial", action="store_true", help="Include OOF spatial KNN features (pre-PS TVT_input only)")
+    parser.add_argument("--include-dtw", action="store_true", help="Include DTW typewell alignment features")
+    parser.add_argument("--include-geology", action="store_true", help="Include formation geology features from typewell")
     parser.add_argument("--residual-target", action="store_true", help="Train on TVT - last_tvt_input delta instead of raw TVT")
     return parser
 
@@ -61,8 +65,12 @@ def main() -> None:
     include_tvt_input = _bool_setting(args.include_tvt_input, feature_config, "include_tvt_input")
     include_geometry = _bool_setting(args.include_geometry, feature_config, "include_geometry")
     include_gr = _bool_setting(args.include_gr, feature_config, "include_gr")
+    include_gr_dwt = _bool_setting(args.include_gr_dwt, feature_config, "include_gr_dwt")
     include_typewell = _bool_setting(args.include_typewell, feature_config, "include_typewell")
     include_trajectory = _bool_setting(args.include_trajectory, feature_config, "include_trajectory")
+    include_spatial = _bool_setting(args.include_spatial, feature_config, "include_spatial")
+    include_dtw = _bool_setting(args.include_dtw, feature_config, "include_dtw")
+    include_geology = _bool_setting(args.include_geology, feature_config, "include_geology")
     residual_target = _bool_setting(args.residual_target, feature_config, "residual_target")
 
     model_dir = Path(output_model).parent
@@ -76,8 +84,12 @@ def main() -> None:
         include_tvt_input=include_tvt_input,
         include_geometry=include_geometry,
         include_gr=include_gr,
+        include_gr_dwt=include_gr_dwt,
         include_trajectory=include_trajectory,
         include_typewell=include_typewell,
+        include_spatial=include_spatial,
+        include_dtw=include_dtw,
+        include_geology=include_geology,
         residual_target=residual_target,
     )
 
@@ -87,6 +99,10 @@ def main() -> None:
         include_gr=include_gr,
         include_trajectory=include_trajectory,
         include_typewell=include_typewell,
+        include_gr_dwt=include_gr_dwt,
+        include_spatial=include_spatial,
+        include_dtw=include_dtw,
+        include_geology=include_geology,
     )
     payload = build_model_payload(
         model=result.model,

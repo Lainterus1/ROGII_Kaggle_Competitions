@@ -28,7 +28,11 @@ def test_model_payload_stores_feature_contract() -> None:
         "include_gr": True,
         "include_trajectory": False,
         "include_typewell": False,
-    }
+        "include_gr_dwt": False,
+            "include_spatial": False,
+            "include_dtw": False,
+            "include_geology": False,
+        }
     assert payload["residual_target"] is True
 
 

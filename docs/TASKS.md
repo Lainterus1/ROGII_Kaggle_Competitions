@@ -46,13 +46,19 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Cancelled | Medium | Old CatBoost decision task; dependency is now approved and belongs to Stage A4 |
 | Done | High | Stage A0: sync CLI/config/README/model-payload contracts before new feature implementation |
 | Rejected | High | Stage A1: trajectory features (CV flat, LB worse: 12.487 vs R1 12.247, all features are geometry duplicates) |
-| Pending | High | Stage A2a: add causal GR DWT features after dependency/runtime spike |
-| Pending | High | Stage A2b: implement strict OOF spatial KNN features with leakage tests |
-| Pending | High | Stage A3a: implement DTW typewell alignment features after rollback checkpoint |
-| Pending | High | Stage A3b: evaluate signed-log residual and derivative target engineering separately |
-| Pending | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
+| Done | High | Stage A2a: add causal GR DWT features — CV 14.13 (+0.06 vs R1), promoted |
+| Done | High | Stage A2b: implement strict OOF spatial KNN — CV 14.21 (−0.02 flat), not promoted, code kept |
+| Done | Medium | Stage A2 combined (DWT + spatial): CV 14.19 (flat), spatial neutralizes DWT gain |
+| Rejected | High | Stage A3a: DTW typewell alignment — CV 14.63 (+0.50 vs A2a), insufficient GR correlation |
+| Rejected | High | Stage A3b.1: signed-log residual target — CV 14.64 (+0.51), residuals not heavy-tailed |
+| Rejected | High | Stage A3b.2: derivative dTVT/dMD target — CV 14.32 (+0.19), integration error accumulation |
+| Rejected | High | Geology v1 (well-level): CV 14.57 (+0.44 vs A2a), signal unstable across folds |
+| Not promoted | High | Geology v2 (per-row GR z-scores): CV 14.17 (−0.04 flat vs A2a), code kept |
+| Deferred | Medium | 1D CNN sequence model — architecture diversity, revisit after tabular ceiling |
+| Deferred | Medium | Multi-seed LGBM + CatBoost + Ridge stacking — cosmetic ensemble on same features |
+| Deferred | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
 | Done | High | Split Kaggle runner into separate training and inference notebooks (ADR-007) |
-| Pending | Medium | After each code push intended for Kaggle, provide exact notebook edit instructions |
+| In Progress | High | Submit A2a to Kaggle: prediction validated locally, docs updated, awaiting Kaggle run |
 
 ## Open questions
 

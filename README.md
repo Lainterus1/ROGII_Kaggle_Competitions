@@ -25,7 +25,7 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 
 ## Текущий статус
 
-Текущий лучший clean baseline: R1 optimized.
+Текущий лучший clean baseline: **A2a (DWT)**.
 
 Готово:
 
@@ -33,15 +33,16 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 - Submission validator.
 - Naive last-known-`TVT_input` baseline.
 - Stage 4 LightGBM + `last_tvt_input` reference baseline: public LB RMSE `24.114`.
-- R1 optimized LightGBM baseline: 18 features, residual target `TVT - last_tvt_input`, CV RMSE `~14.19`, public LB RMSE `12.247`.
-- `docs/HOW_IT_WORKS.md` with feature-by-feature explanation.
-- New staged roadmap A0-A4 for trajectory features, DWT, strict OOF spatial KNN, DTW, target engineering and structural blending.
+- R1 optimized LightGBM baseline: 18 features, residual target, CV RMSE `~14.19`, LB RMSE `12.247`.
+- **A2a DWT baseline: 20 features (+2 causal GR DWT), residual target, CV RMSE `14.13`, LB pending.**
+- `docs/HOW_IT_WORKS.md` — feature-by-feature explanation including DWT.
+- Staged roadmap A0-A4. A1-A4 feature experiments completed, tabular ceiling confirmed at CV ~14.13.
+- 106 tests, all green.
 
 Следующее:
 
-- Stage A0: sync CLI/config/README/model-payload contracts before implementing new feature blocks.
-- Stage A1: implement spatial kinematics and trajectory geometry features.
-- Kaggle submissions remain manual only. After a push intended for Kaggle, the agent should provide exact competition notebook edit instructions.
+- Submit A2a to Kaggle — verify LB gap.
+- Deferred: 1D CNN sequence model, multi-model ensemble (Stage A4+).
 
 ## Планируемая установка
 
@@ -60,15 +61,24 @@ python -m pytest tests
 python scripts/make_data_inventory.py --data-dir data
 python scripts/run_naive_baseline.py --data-dir data --output outputs/submission.csv
 python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
-python scripts/run_train.py --config configs/baseline_lgbm.yaml --data-dir data
+
+# R1 baseline (18 features)
 python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --residual-target --output-model models/r1_lgbm.pkl
-python scripts/run_predict.py --data-dir data --model models/r1_lgbm.pkl --output outputs/submission.csv
+
+# A2a baseline (20 features, DWT promoted)
+python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --include-gr-dwt --residual-target --output-model models/a2a_lgbm.pkl
+
+# Predict (model payload carries feature flags and column order)
+python scripts/run_predict.py --data-dir data --model models/a2a_lgbm.pkl --output outputs/submission.csv
 python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
+
+# Optional feature flags (experiments, not in active baseline):
+# --include-spatial   (OOF spatial KNN)
+# --include-dtw       (DTW typewell alignment)
+# --include-geology   (formation geology)
 ```
 
 Модели, сохраненные новым train payload, сами хранят feature flags и список колонок. Для таких моделей `run_predict.py` не должен получать повторные `--include-*` флаги, если только это не legacy-модель без payload metadata.
-
-Планируемые команды будут добавляться по мере реализации этапов A1-A4. Не использовать несуществующие флаги из плана до соответствующей реализации в `scripts/`.
 
 Kaggle workflow:
 

@@ -1,5 +1,5 @@
 run:
-  name: r1_lgbm_optimized
+  name: a2_lgbm_dwt_spatial
   type: model_baseline
   seed: 42
   environment: local
@@ -15,7 +15,7 @@ model:
     n_estimators: 1000
 
 features:
-  set_name: r1_optimized
+  set_name: a2_dwt_spatial
   columns:
     - MD
     - X
@@ -38,11 +38,9 @@ features:
   include_tvt_input: false
   include_geometry: true
   include_gr: true
-  include_gr_dwt: false
+  include_gr_dwt: true
   include_typewell: false
-  include_spatial: false
-  include_dtw: false
-  include_geology: false
+  include_spatial: true
   residual_target: true
 
 validation:
@@ -51,5 +49,5 @@ validation:
   group_column: well_id
 
 artifacts:
-  model_path: models/r1_lgbm.pkl
+  model_path: models/a2_lgbm.pkl
   submission_path: outputs/submission.csv

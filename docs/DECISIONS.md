@@ -399,3 +399,76 @@ ADR-007 split training and inference into separate notebooks, but code updates s
 ## Open questions
 
 - None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.
+
+## ADR-009: A2a DWT promoted as active baseline
+
+Date: 2026-06-05  
+Status: Accepted
+
+### Context
+
+Stage A2a added causal GR DWT features (PyWavelets db4, trailing window 256): `gr_dwt_approx` + `gr_dwt_detail_energy`. Runtime 1.4 min full train, no leakage (causal verified by test).
+
+### Decision
+
+Promote A2a as active baseline. CV 14.13 vs R1 14.19 (+0.06). Feature flag `include_gr_dwt` integrated into payload contract.
+
+### Consequences
+
+- Active baseline: 20 features (6 base + 9 geometry + 3 GR + 2 DWT).
+- Marginal improvement; DWT is a better GR filter, not a new information source.
+- Kaggle submission pending to verify LB gap.
+
+## ADR-010: A3 DTW, signed-log, derivative — all rejected
+
+Date: 2026-06-05  
+Status: Accepted
+
+### Context
+
+Three target/alignment improvements tested: DTW typewell alignment (A3a), signed-log residual target (A3b.1), derivative dTVT/dMD target (A3b.2).
+
+### Decision
+
+Reject all three. DTW CV 14.63 (+0.50 vs A2a) — GR cross-correlation only 0.43. Signed-log CV 14.64 (+0.51) — residuals not heavy-tailed (bounded ±40, skew 0.74). Derivative CV 14.32 (+0.19) — integration error accumulation.
+
+### Consequences
+
+- Code kept behind feature flags (`include_dtw`, `--signed-log-target`). No runtime cost when disabled.
+- Target remains plain residual `TVT − last_tvt_input`.
+
+## ADR-011: Geology features — rejected
+
+Date: 2026-06-05  
+Status: Accepted
+
+### Context
+
+Two versions of Geology features tested: v1 (well-level constants: formation at PS, next formation, boundaries) and v2 (per-row GR z-scores to 8 formations). 43 unique formations in typewells.
+
+### Decision
+
+Reject both. v1 CV 14.57 (+0.44) — well-level constants cause unstable overfitting. v2 CV 14.17 (−0.04 flat) — per-row signal adds no net benefit.
+
+### Consequences
+
+- Code kept in `src/rogii/geology_features.py`. Feature flag `include_geology` available.
+- GR statistics for 8 formations hard-coded in module.
+
+## ADR-012: Tabular feature ceiling at CV ~14.13
+
+Date: 2026-06-05  
+Status: Accepted
+
+### Context
+
+8 experiments (A1–A4) over 2 sessions. All feature additions produced flat or degraded CV. 69% model importance from 4 features (X, Y, Z, gr_energy). Remaining 25+ features share 31% importance.
+
+### Decision
+
+Acknowledge tabular feature ceiling at CV ~14.13 for LightGBM with features derived from X, Y, Z, GR, TVT_input. Further improvement requires architectural diversity (CNN for sequence modeling) or ensemble methods.
+
+### Consequences
+
+- Active feature development paused. Focus shifts to A4+: CNN, multi-model ensemble.
+- Existing feature flags preserved for future compound experiments.

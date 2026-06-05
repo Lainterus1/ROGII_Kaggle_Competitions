@@ -5,4 +5,6 @@ lightgbm
 matplotlib
 pyyaml
 mlflow
+scipy
+pywavelets
 pytest
