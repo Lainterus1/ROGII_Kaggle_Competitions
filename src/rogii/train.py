@@ -8,8 +8,8 @@ import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.model_selection import GroupKFold
 
-from rogii.data_loading import list_well_ids, read_horizontal_well
-from rogii.features import SAFE_NUMERIC_FEATURES, build_features, post_ps_mask
+from rogii.data_loading import list_well_ids, read_horizontal_well, read_typewell
+from rogii.features import SAFE_NUMERIC_FEATURES, build_features, last_known_tvt_input_value, post_ps_mask
 from rogii.metrics import rmse
 
 
@@ -21,9 +21,17 @@ class TrainResult:
     cv_rmse_folds: list[float]
     train_rows: int
     train_wells: int
+    residual_target: bool = False
 
 
-def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+def _collect_train_post_ps(
+    data_dir: str | Path,
+    include_tvt_input: bool = False,
+    include_geometry: bool = False,
+    include_gr: bool = False,
+    include_typewell: bool = False,
+    residual_target: bool = False,
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     features_list: list[pd.DataFrame] = []
     targets: list[float] = []
     groups: list[int] = []
@@ -32,6 +40,8 @@ def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False
     well_ids = list_well_ids(data_dir, "train")
     total = len(well_ids)
     print(f"[1/3] Loading {total} train wells ...")
+
+    use_tvt_feature = include_tvt_input and not residual_target
 
     for i, well_id in enumerate(well_ids):
         if (i + 1) % 100 == 0:
@@ -43,7 +53,18 @@ def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False
         if not mask.any():
             continue
 
-        feats = build_features(horizontal, include_tvt_input=include_tvt_input)
+        last_tvt = last_known_tvt_input_value(horizontal)
+
+        typewell_frame = read_typewell(data_dir, "train", well_id) if include_typewell else None
+
+        feats = build_features(
+            horizontal,
+            include_tvt_input=use_tvt_feature,
+            include_geometry=include_geometry,
+            include_gr=include_gr,
+            typewell=typewell_frame,
+            include_typewell=include_typewell,
+        )
         post_feats = feats.loc[mask].copy()
         post_target = horizontal.loc[mask, "TVT"].astype(float)
 
@@ -53,6 +74,11 @@ def _collect_train_post_ps(data_dir: str | Path, include_tvt_input: bool = False
 
         post_feats = post_feats.loc[valid]
         post_target = post_target.loc[valid]
+
+        if residual_target:
+            if np.isnan(last_tvt):
+                continue
+            post_target = post_target - last_tvt
 
         features_list.append(post_feats)
         targets.extend(post_target.tolist())
@@ -75,8 +101,19 @@ def run_train(
     seed: int = 42,
     model_params: dict | None = None,
     include_tvt_input: bool = False,
+    include_geometry: bool = False,
+    include_gr: bool = False,
+    include_typewell: bool = False,
+    residual_target: bool = False,
 ) -> TrainResult:
-    X, y, groups = _collect_train_post_ps(data_dir, include_tvt_input=include_tvt_input)
+    X, y, groups = _collect_train_post_ps(
+        data_dir,
+        include_tvt_input=include_tvt_input,
+        include_geometry=include_geometry,
+        include_gr=include_gr,
+        include_typewell=include_typewell,
+        residual_target=residual_target,
+    )
 
     if model_params is None:
         model_params = {}
@@ -117,4 +154,5 @@ def run_train(
         cv_rmse_folds=cv_scores,
         train_rows=len(y),
         train_wells=len(np.unique(groups)),
+        residual_target=residual_target,
     )

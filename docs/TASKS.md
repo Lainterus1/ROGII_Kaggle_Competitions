@@ -36,8 +36,16 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | Medium | Step 09: create documentation maintenance policy |
 | Done | Medium | Step 10: create review and optimization protocol |
 | Done | Medium | Step 11: create handoff and context compaction |
+| Done | High | Freeze Stage 4 LightGBM + `last_tvt_input` as the reference baseline |
+| Done | High | Roadmap R1: implement residual target plus deterministic GR and geometry features |
+| Done | High | Roadmap R2: implement simple typewell-reference features after leakage review (degraded CV, not promoted) |
+| Done | High | R1 feature ablation: remove 20 zero/low-importance features, finalize 18-feature set with identical CV |
+| Pending | High | Submit R1 optimized model to Kaggle |
+| Pending | Medium | Roadmap R3: implement multi-seed LightGBM and simple ensemble |
+| Pending | Medium | Decide whether to add CatBoost as a new dependency for Roadmap R3 |
 
 ## Open questions
 
 - What missing-value patterns matter for first ML features?
 - How should typewell data be aligned safely?
+- Should CatBoost be added to `requirements.txt` for the next model upgrade stage?

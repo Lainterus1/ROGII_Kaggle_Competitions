@@ -70,6 +70,13 @@ def read_horizontal_well(data_dir: str | Path, split: str, well_id: str) -> pd.D
     return frame
 
 
+def read_typewell(data_dir: str | Path, split: str, well_id: str) -> pd.DataFrame:
+    """Read one typewell file and attach a `well_id` column."""
+    frame = pd.read_csv(typewell_path(data_dir, split, well_id))
+    frame.insert(0, "well_id", well_id)
+    return frame
+
+
 def read_sample_submission(data_dir: str | Path) -> pd.DataFrame:
     """Read sample submission."""
     return pd.read_csv(sample_submission_path(data_dir))

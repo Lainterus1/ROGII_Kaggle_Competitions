@@ -34,8 +34,10 @@ Your job is to build the best possible baseline without inventing data contracts
 | Metric contract | `docs/METRICS.md` | Update after official metric confirmation |
 | Validation design | `docs/VALIDATION_STRATEGY.md` | Update when folds or leakage controls change |
 | Baseline stages | `docs/BASELINE_PLAN.md` | Keep baseline scope and acceptance criteria current |
+| Post-baseline roadmap | `docs/ROADMAP.md` | Keep future development stages, priorities and promotion gates current |
 | Experiment history | `docs/EXPERIMENT_LOG.md` | Human-readable layer on top of MLflow |
 | Public notebook references | `docs/PUBLIC_NOTEBOOK_REFERENCES.md` | Required if public notebook ideas are used |
+| Feature reference | `docs/HOW_IT_WORKS.md` | Feature-by-feature explanation, importance and ablation rationale |
 
 ## Context retrieval policy
 
@@ -111,6 +113,7 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 | Metric confirmation or implementation change | `docs/METRICS.md` |
 | Validation strategy change | `docs/VALIDATION_STRATEGY.md`, `docs/DECISIONS.md` if significant |
 | Baseline stage change | `docs/BASELINE_PLAN.md`, `docs/TASKS.md` |
+| Roadmap stage or priority change | `docs/ROADMAP.md`, `docs/TASKS.md` |
 | Experiment run | `docs/EXPERIMENT_LOG.md` and MLflow |
 | Public notebook idea used | `docs/PUBLIC_NOTEBOOK_REFERENCES.md`, optionally `docs/DECISIONS.md` |
 | New blocker or risk | `docs/KNOWN_ISSUES.md` |

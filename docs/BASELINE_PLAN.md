@@ -23,13 +23,19 @@ Baseline sequence, model scope, feature safety rules, acceptance criteria and fu
 
 ## Current content
 
+Baseline status:
+
+- Stage 4 is frozen as the reference baseline.
+- Future improvement planning has moved to `docs/ROADMAP.md`.
+- Do not rewrite the recorded Stage 4 result when experimenting with new feature sets or models; log new runs separately in `docs/EXPERIMENT_LOG.md`.
+
 Initial baseline sequence:
 
 1. Valid submission baseline: last-known-`TVT_input` prediction to test submission contract. Status: done in Step 07.
 2. Naive local baseline: last-known-`TVT_input` rule evaluated on train post-PS rows. Status: done in Step 07.
 3. First ML baseline: LightGBM using safe numeric features (no TVT_input). Status: done. RMSE 120.06.
 4. Stronger baseline: LightGBM + last_tvt_input well-level constant. Status: done. CV 20.58, LB 24.11.
-5. Next: rolling/lag GR features, typewell alignment, CatBoost/XGBoost, ensemble.
+5. Next development stages: see `docs/ROADMAP.md`.
 
 Acceptance criteria for first useful baseline:
 

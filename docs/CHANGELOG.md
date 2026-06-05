@@ -48,6 +48,18 @@ Human-readable change history for documentation, structure, code, configs and wo
 - First Kaggle submission: Stage 4 LightGBM + last_tvt_input. Official LB RMSE: 24.114 (CV: 20.58). Recorded in `docs/EXPERIMENT_LOG.md`.
 - Created `docs/HOW_IT_WORKS.md` — beginner-friendly model explanation in Russian.
 
+## 2026-06-05
+
+- Created `docs/ROADMAP.md` for post-baseline development stages and promotion gates.
+- Froze Stage 4 LightGBM + `last_tvt_input` as the reference baseline.
+- Recorded reviewed public notebooks and rejected high-risk artifact/coordinate-overlap routes for the clean mainline roadmap.
+- Added `ADR-003` for the baseline freeze and roadmap decision.
+- Implemented Roadmap R1: residual target (`TVT - last_tvt_input`), 9 geometry features, 20 GR features (38 total). CV 14.09, ~32% improvement over Stage 4.
+- Added `ADR-004` for residual target and forward-looking GR feature decisions.
+- Implemented Roadmap R2: 15 typewell-reference features (11 anchor-offset + 4 summary). CV degraded to 14.75 → not promoted. Added `ADR-005`.
+- Ran feature importance ablation on R1: dropped 20 zero/low-importance features (GR_is_missing, MD_delta, row_position, 5 rolling windows, 8 lag/leads, gr_d1, gr_d2, gr_envelope). Final set: 18 features with identical CV (14.19).
+- Added `docs/HOW_IT_WORKS.md` — feature-by-feature explanation with importance analysis and ablation rationale.
+
 ## Open questions
 
 - None.

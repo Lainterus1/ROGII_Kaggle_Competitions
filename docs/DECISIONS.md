@@ -149,6 +149,125 @@ The Kaggle notebook is configured with internet enabled and competition data att
 - Verify `data/` is ignored before every commit.
 - Push bootstrap skeleton before using the Kaggle notebook.
 
+## ADR-003: Freeze Stage 4 baseline and create post-baseline roadmap
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+The project has a valid Kaggle-submitted baseline: LightGBM with `safe_numeric_v1 + last_tvt_input`, 5-fold `GroupKFold` CV RMSE `20.58 +/- 3.99` on Kaggle and public LB RMSE `24.114`.
+
+Two public notebooks were reviewed for improvement ideas. They suggest residual target modeling, GR rolling/lag features, geometry features, typewell alignment, CatBoost/LightGBM ensembles, beam search, particle filters, TabICL artifact stacks and exact coordinate-overlap blending.
+
+### Decision
+
+- Freeze Stage 4 as the reference baseline.
+- Track post-baseline development in `docs/ROADMAP.md`.
+- Prioritize clean, reproducible stages: residual GR/geometry features, simple typewell features, then model upgrades.
+- Do not include public saved artifacts, TabICL artifact stacks or exact train/test coordinate-overlap blending in the clean mainline roadmap.
+
+### Alternatives considered
+
+- Continue editing `docs/BASELINE_PLAN.md` as the only plan document. Rejected because the baseline is now fixed and future work needs promotion gates and deferred-risk tracking.
+- Adopt the strongest public artifact route directly. Rejected because it is opaque, dependency-heavy and conflicts with the reproducible baseline goal.
+
+### Consequences
+
+#### Positive
+
+- The current baseline remains a stable comparison point.
+- Future experiments have a clear order and promotion criteria.
+- High-risk public-notebook ideas are documented instead of silently copied.
+
+#### Negative
+
+- Maintaining a separate roadmap adds one more source-of-truth document.
+- Some public LB-improving tricks are intentionally deferred or rejected for mainline use.
+
+#### Follow-up
+
+- Implement Roadmap R1 before R2/R3.
+- Ask the user before adding CatBoost to project dependencies.
+
+## ADR-004: Residual target and forward-looking GR features for Roadmap R1
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+Roadmap R1 adds residual target (predict `TVT - last_tvt_input` instead of raw `TVT`) and deterministic geometry/GR features. Decisions were needed on: (1) whether `last_tvt_input` stays as a feature in residual mode, (2) definition of `frac_after_ps`, (3) whether GR features may use centered rolling windows and forward-looking leads.
+
+### Decision
+
+- In residual mode, `last_tvt_input` is NOT a model feature. It is used only as the reconstruction base: `pred_tvt = last_tvt_input + pred_delta`.
+- `frac_after_ps` is row-level progress through the post-PS section: `(i - ps_idx) / (n - ps_idx)`, ranging from 0 at PS to 1 at the last row.
+- GR features use full well context (centered rolling windows, forward-looking leads) because all GR values are available in test data at prediction time.
+- Trained model is saved as a dict `{"model": ..., "residual_target": True, "include_geometry": True, "include_gr": True}` so that `run_predict.py` auto-detects the feature configuration.
+- Backward compatibility: `run_predict.py` handles both bare `LGBMRegressor` pickles (old format) and dict payloads (new format).
+
+### Alternatives considered
+
+- Keep `last_tvt_input` as a feature alongside residual target. Rejected to keep the model focused on learning deviation patterns.
+- Centered vs backward-only GR windows. Centered chosen because test data contains full GR profiles.
+
+### Consequences
+
+#### Positive
+
+- Clean separation: model learns delta, reconstruction is deterministic.
+- Feature config auto-detection eliminates mismatch between train and predict.
+- 32% CV improvement over frozen Stage 4 baseline.
+
+#### Negative
+
+- Old models saved as bare pickles don't carry feature config; user must pass correct CLI flags manually.
+- `frac_after_ps` definition differs from some public notebooks; may need adjustment if comparing to external baselines.
+
+#### Follow-up
+
+- R2: typewell features require separate leakage review.
+
+## ADR-005: Typewell V1 features rejected due to CV degradation
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+Roadmap R2 added 15 typewell-reference features: 11 anchor-offset GR residuals (`tw_gr_residual_{offset} = horizontal_GR - typewell_GR(last_tvt_input + offset)`) and 4 summary statistics (`tw_range`, `tw_gr_mean`, `tw_gr_std`, `tw_gr_at_last_tvt`). All typewell data is available in both train and test.
+
+### Decision
+
+R2 typewell features are not promoted to the current best baseline.
+
+### Rationale
+
+R2 CV RMSE `14.75 ± 0.77` is 0.66 worse than R1 (`14.09 ± 0.88`). The anchor-offset residual features are highly correlated with the base `GR` feature (since `tw_gr_residual_{o} = GR - const`), adding redundancy without new signal. Summary features may be partially captured by the residual target approach already.
+
+### Alternatives considered
+
+- Keep typewell features with feature selection. Rejected for now — structure of features (GR minus constant) inherently limits added value.
+- Different typewell alignment strategy (DTW, beam search). Deferred to a future roadmap stage after more fundamental improvements.
+
+### Consequences
+
+#### Positive
+
+- R1 remains the cleanest and best-performing baseline.
+- No unnecessary feature bloat in production model.
+
+#### Negative
+
+- Typewell data is not yet leveraged.
+- May need a fundamentally different approach to typewell alignment.
+
+#### Follow-up
+
+- Submit R1 to Kaggle.
+- Revisit typewell in a future roadmap stage with feature selection or alternative alignment.
+
 ## Open questions
 
 - What is the official Kaggle metric?

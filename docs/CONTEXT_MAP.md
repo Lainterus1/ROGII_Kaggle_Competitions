@@ -31,7 +31,8 @@ Recommended reading order for future agents:
 3. `docs/ARCHITECTURE.md` for selected architecture and component boundaries.
 4. `docs/DECISIONS.md` for accepted decisions.
 5. `docs/TASKS.md` for current backlog.
-6. `AGENTS.md` after it is created in Step 05.
+6. `docs/ROADMAP.md` for post-baseline development direction.
+7. `AGENTS.md` after it is created in Step 05.
 
 Repository and runtime locations:
 
@@ -60,6 +61,7 @@ Document ownership:
 | `docs/METRICS.md` | Official metric and local implementation |
 | `docs/VALIDATION_STRATEGY.md` | Validation design and leakage checks |
 | `docs/BASELINE_PLAN.md` | Baseline stages and acceptance criteria |
+| `docs/ROADMAP.md` | Post-baseline development roadmap and promotion gates |
 | `docs/EXPERIMENT_LOG.md` | Human-readable experiment history |
 | `docs/PUBLIC_NOTEBOOK_REFERENCES.md` | Reviewed public notebooks and reused ideas |
 
