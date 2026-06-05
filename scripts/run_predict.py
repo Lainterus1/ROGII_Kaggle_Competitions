@@ -21,6 +21,7 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     parser.add_argument("--include-geometry", action="store_true", help="Include geometry features relative to Prediction Start")
     parser.add_argument("--include-gr", action="store_true", help="Include GR-derived rolling/lag/envelope features")
+    parser.add_argument("--include-trajectory", action="store_true", help="Include 3D trajectory kinematics features (automatically includes geometry)")
     parser.add_argument("--include-typewell", action="store_true", help="Include typewell-reference GR residual and summary features")
     parser.add_argument("--residual-target", action="store_true", help="Model predicts TVT delta; reconstruct TVT at prediction time")
     return parser
@@ -40,6 +41,7 @@ def main() -> None:
             include_tvt_input=args.include_tvt_input,
             include_geometry=args.include_geometry,
             include_gr=args.include_gr,
+            include_trajectory=args.include_trajectory,
             include_typewell=args.include_typewell,
         ),
         cli_residual_target=args.residual_target,
@@ -52,6 +54,7 @@ def main() -> None:
         include_tvt_input=flags["include_tvt_input"],
         include_geometry=flags["include_geometry"],
         include_gr=flags["include_gr"],
+        include_trajectory=flags["include_trajectory"],
         include_typewell=flags["include_typewell"],
         residual_target=contract.residual_target,
         feature_columns=contract.feature_columns,

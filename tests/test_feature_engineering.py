@@ -6,11 +6,13 @@ from rogii.features import (
     GEOMETRY_FEATURES,
     GR_FEATURES,
     SAFE_NUMERIC_FEATURES,
+    TRAJECTORY_FEATURES,
     TYPEWELL_FEATURES,
     WITH_TVT_INPUT_FEATURES,
     build_features,
     build_geometry_features,
     build_gr_features,
+    build_trajectory_features,
     build_typewell_features,
     get_feature_set_name,
     last_known_tvt_input_value,
@@ -324,3 +326,134 @@ def test_typewell_features_residual_at_anchor_zero() -> None:
     gr = hw["GR"].astype(float).values
     expected = gr - tw_gr_at_last
     assert np.allclose(feats["tw_gr_residual_0"].values, expected)
+
+
+def _make_straight_well(n_rows: int = 100) -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "MD": np.linspace(1000, 2000, n_rows),
+            "X": np.linspace(0, 100, n_rows),
+            "Y": np.linspace(0, 0, n_rows),
+            "Z": np.linspace(-1000, -900, n_rows),
+            "GR": np.linspace(80, 120, n_rows),
+            "TVT_input": np.linspace(5000, 5000 + n_rows, n_rows),
+        }
+    )
+    ps_start = n_rows // 2
+    frame.loc[frame.index >= ps_start, "TVT_input"] = np.nan
+    return frame
+
+
+def _make_curved_well(n_rows: int = 100) -> pd.DataFrame:
+    t = np.linspace(0, 2 * np.pi, n_rows)
+    frame = pd.DataFrame(
+        {
+            "MD": np.linspace(1000, 2000, n_rows),
+            "X": 100 * np.cos(t),
+            "Y": 100 * np.sin(t),
+            "Z": np.linspace(-1000, -900, n_rows),
+            "GR": np.linspace(80, 120, n_rows),
+            "TVT_input": np.linspace(5000, 5000 + n_rows, n_rows),
+        }
+    )
+    ps_start = n_rows // 2
+    frame.loc[frame.index >= ps_start, "TVT_input"] = np.nan
+    return frame
+
+
+def test_trajectory_features_columns() -> None:
+    frame = _make_straight_well(100)
+    traj = build_trajectory_features(frame)
+    assert list(traj.columns) == TRAJECTORY_FEATURES
+    assert len(traj) == 100
+    assert len(TRAJECTORY_FEATURES) == 6
+
+
+def test_trajectory_features_no_nan() -> None:
+    frame = _make_straight_well(100)
+    traj = build_trajectory_features(frame)
+    assert not traj.isna().any().any()
+
+
+def test_trajectory_single_row() -> None:
+    frame = _make_straight_well(1)
+    traj = build_trajectory_features(frame)
+    assert len(traj) == 1
+    assert not traj.isna().any().any()
+
+
+def test_trajectory_straight_well() -> None:
+    frame = _make_straight_well(100)
+    traj = build_trajectory_features(frame)
+    eps = 1e-6
+    dls = traj["dogleg_severity_10m"].values
+    assert (np.abs(dls[11:]) < eps).all()
+    tort = traj["tortuosity_window_50"].values
+    assert np.allclose(tort[51:], 1.0, atol=1e-3)
+
+
+def test_trajectory_curved_well() -> None:
+    frame = _make_curved_well(100)
+    traj = build_trajectory_features(frame)
+    assert np.any(np.abs(traj["dogleg_severity_10m"].values) > 1e-6)
+    max_tort = traj["tortuosity_window_50"].max()
+    assert max_tort >= 1.0
+
+
+def test_trajectory_dip_angle_proxy_updip() -> None:
+    frame = _make_straight_well(100)
+    frame["Z"] = np.linspace(-1000, -900, 100)
+    traj = build_trajectory_features(frame)
+    assert np.all(traj["dip_angle_proxy_10"].iloc[20:] > 0)
+
+
+def test_trajectory_azimuth_bounded() -> None:
+    frame = _make_curved_well(100)
+    traj = build_trajectory_features(frame)
+    assert (np.abs(traj["sin_azimuth"]) <= 1.0).all()
+    assert (np.abs(traj["cos_azimuth"]) <= 1.0).all()
+    sq_sum = traj["sin_azimuth"] ** 2 + traj["cos_azimuth"] ** 2
+    disp_zero = frame["X"].diff().fillna(0).abs() < 1e-9
+    disp_zero &= frame["Y"].diff().fillna(0).abs() < 1e-9
+    non_zero_rows = ~disp_zero.values
+    if non_zero_rows.any():
+        assert np.allclose(sq_sum[non_zero_rows], 1.0, atol=1e-6)
+
+
+def test_trajectory_z_local_delta_sign() -> None:
+    frame = _make_straight_well(100)
+    traj = build_trajectory_features(frame)
+    ps_idx = 50
+    if ps_idx > 0:
+        mean_pre_ps_z = frame["Z"].iloc[:ps_idx].mean()
+        expected = frame["Z"].iloc[ps_idx] - mean_pre_ps_z
+        assert traj.loc[ps_idx, "z_local_delta"] == pytest.approx(expected)
+
+
+def test_build_features_with_trajectory() -> None:
+    frame = _make_straight_well(100)
+    features = build_features(frame, include_trajectory=True)
+    expected_cols = SAFE_NUMERIC_FEATURES + GEOMETRY_FEATURES + TRAJECTORY_FEATURES
+    assert list(features.columns) == expected_cols
+    assert "z_local_delta" in features.columns
+    assert "dogleg_severity_10m" in features.columns
+    assert "sin_azimuth" in features.columns
+
+
+def test_build_features_trajectory_with_gr() -> None:
+    frame = _make_straight_well(100)
+    features = build_features(frame, include_trajectory=True, include_gr=True)
+    expected_cols = SAFE_NUMERIC_FEATURES + GEOMETRY_FEATURES + TRAJECTORY_FEATURES + GR_FEATURES
+    assert list(features.columns) == expected_cols
+    assert len(features.columns) == 6 + 9 + 6 + 3
+
+
+def test_trajectory_features_constants() -> None:
+    assert isinstance(TRAJECTORY_FEATURES, list)
+    assert len(TRAJECTORY_FEATURES) == 6
+    assert "z_local_delta" in TRAJECTORY_FEATURES
+    assert "dip_angle_proxy_10" in TRAJECTORY_FEATURES
+    assert "dogleg_severity_10m" in TRAJECTORY_FEATURES
+    assert "tortuosity_window_50" in TRAJECTORY_FEATURES
+    assert "sin_azimuth" in TRAJECTORY_FEATURES
+    assert "cos_azimuth" in TRAJECTORY_FEATURES

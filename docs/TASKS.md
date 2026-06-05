@@ -45,7 +45,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Cancelled | Medium | Old Roadmap R3 standalone model-upgrade task; superseded by Stage A4 structural blending |
 | Cancelled | Medium | Old CatBoost decision task; dependency is now approved and belongs to Stage A4 |
 | Done | High | Stage A0: sync CLI/config/README/model-payload contracts before new feature implementation |
-| Pending | High | Stage A1: implement spatial kinematics and trajectory geometry feature block |
+| Done | High | Stage A1: implement spatial kinematics and trajectory geometry feature block (pending CV run) |
 | Pending | High | Stage A2a: add causal GR DWT features after dependency/runtime spike |
 | Pending | High | Stage A2b: implement strict OOF spatial KNN features with leakage tests |
 | Pending | High | Stage A3a: implement DTW typewell alignment features after rollback checkpoint |

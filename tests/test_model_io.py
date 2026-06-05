@@ -26,6 +26,7 @@ def test_model_payload_stores_feature_contract() -> None:
         "include_tvt_input": False,
         "include_geometry": True,
         "include_gr": True,
+        "include_trajectory": False,
         "include_typewell": False,
     }
     assert payload["residual_target"] is True

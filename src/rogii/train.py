@@ -30,6 +30,7 @@ def _collect_train_post_ps(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_trajectory: bool = False,
     include_typewell: bool = False,
     residual_target: bool = False,
 ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
@@ -63,6 +64,7 @@ def _collect_train_post_ps(
             include_tvt_input=use_tvt_feature,
             include_geometry=include_geometry,
             include_gr=include_gr,
+            include_trajectory=include_trajectory,
             typewell=typewell_frame,
             include_typewell=include_typewell,
         )
@@ -104,6 +106,7 @@ def run_train(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_trajectory: bool = False,
     include_typewell: bool = False,
     residual_target: bool = False,
 ) -> TrainResult:
@@ -112,6 +115,7 @@ def run_train(
         include_tvt_input=include_tvt_input,
         include_geometry=include_geometry,
         include_gr=include_gr,
+        include_trajectory=include_trajectory,
         include_typewell=include_typewell,
         residual_target=residual_target,
     )

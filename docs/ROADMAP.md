@@ -27,9 +27,9 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|
-| Stage | R1 optimized |
+| Stage | R1 optimized (+A1 implemented, pending CV) |
 | Model | LightGBM |
-| Features | 18 features: 6 base + 9 geometry + 3 GR |
+| Features | 24 features (with A1): 6 base + 9 geometry + 6 trajectory + 3 GR |
 | Target | `residual = TVT - last_tvt_input` |
 | Validation | 5-fold `GroupKFold` by well |
 | Local/Kaggle CV | RMSE `~14.19` |
@@ -108,12 +108,13 @@ Promotion gate:
 
 ## Stage A1: Spatial Kinematics and Trajectory Geometry
 
+Status: Implemented. Pending CV run and promotion gate.
+
 Goal: improve the tree model's representation of 3D trajectory curves without changing the model family.
 
-Feature scope:
+Feature scope (6 features, `z_ps_residual` excluded — already covered by `dz_since_ps` in `GEOMETRY_FEATURES`):
 
 - `z_local_delta`: current `Z` minus the mean pre-PS `Z` for the same well.
-- `z_ps_residual`: current `Z` minus `Z` at Prediction Start.
 - `dip_angle_proxy_10`: `(Z_i - Z_{i-10}) / (MD_i - MD_{i-10})`.
 - `dogleg_severity_10m`: local 3D direction change over approximately 10m MD.
 - `tortuosity_window_50`: arc length over approximately 50m MD divided by straight-line 3D distance.
@@ -121,32 +122,33 @@ Feature scope:
 
 Implementation notes:
 
-- Add this as a separate feature family, not by rewriting the current R1 `GEOMETRY_FEATURES` contract.
-- Prefer a new constant such as `TRAJECTORY_FEATURES` and a CLI/model payload flag such as `include_trajectory`.
-- Use only `MD`, `X`, `Y`, `Z`, `GR` and pre-PS location information from `TVT_input` null boundary.
-- Fill early-window and zero-distance edge cases deterministically with finite values.
+- `TRAJECTORY_FEATURES` constant (6 features) and `build_trajectory_features()` in `features.py`.
+- `include_trajectory` is a superset of `include_geometry`: setting `--include-trajectory` automatically includes geometry features. `include_geometry` remains as a legacy flag for backward compatibility (R1 models load without changes).
+- Feature flag stored in model payload; predict auto-detects from payload — no CLI flags needed for inference.
+- Resulting R1+A1 feature count: 6 base + 9 geometry + 6 trajectory + 3 GR = **24 features**.
+- Zero MD deltas and early windows handled with `np.divide(out=zeros)` and finite fallbacks.
 
 Primary files:
 
-- `src/rogii/features.py`
-- `src/rogii/train.py`
-- `src/rogii/predict.py`
-- `scripts/run_train.py`
-- `scripts/run_predict.py`
-- `tests/test_feature_engineering.py`
-- `tests/test_no_target_leakage.py`
+- `src/rogii/features.py` — `TRAJECTORY_FEATURES`, `build_trajectory_features()`
+- `src/rogii/model_io.py` — `include_trajectory` in `FEATURE_FLAG_KEYS`
+- `src/rogii/train.py` — `include_trajectory` parameter
+- `src/rogii/predict.py` — `include_trajectory` parameter
+- `scripts/run_train.py` — `--include-trajectory` CLI flag
+- `scripts/run_predict.py` — `--include-trajectory` CLI flag
+- `tests/test_feature_engineering.py` — 12 trajectory tests
+- `tests/test_no_target_leakage.py` — leakage test for trajectory features
 
 Verification:
 
-- Synthetic tests for straight-line wells, curved wells, single-row wells and zero MD deltas.
-- `python -m pytest tests`
-- Candidate train command: `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --include-trajectory --residual-target --output-model models/a1_lgbm.pkl`
-- Candidate predict command after train: `python scripts/run_predict.py --data-dir data --model models/a1_lgbm.pkl --output outputs/a1_submission.csv`
+- `python -m pytest tests` — 72 passed, 0 warnings.
+- Candidate train command: `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-trajectory --include-gr --residual-target --output-model models/a1_lgbm.pkl`
+- Candidate predict command: `python scripts/run_predict.py --data-dir data --model models/a1_lgbm.pkl --output outputs/a1_submission.csv`
 - Submission validation: `python scripts/validate_submission.py --data-dir data --submission outputs/a1_submission.csv`
 
 Promotion gate:
 
-- Promote only if leakage tests pass and CV improves over R1 optimized or feature importance gives strong evidence for keeping the block.
+- Promote only if leakage tests pass and CV improves over R1 optimized (~14.19 RMSE) or feature importance gives strong evidence for keeping the block.
 
 ## Stage A2: GR DWT and Strict OOF Spatial KNN
 

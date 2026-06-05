@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_typewell")
+FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_trajectory", "include_typewell")
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ def make_feature_flags(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_trajectory: bool = False,
     include_typewell: bool = False,
 ) -> dict[str, bool]:
     """Return normalized feature flags stored in model payloads."""
@@ -29,6 +30,7 @@ def make_feature_flags(
         "include_tvt_input": bool(include_tvt_input),
         "include_geometry": bool(include_geometry),
         "include_gr": bool(include_gr),
+        "include_trajectory": bool(include_trajectory),
         "include_typewell": bool(include_typewell),
     }
 
@@ -74,6 +76,7 @@ def build_model_payload(
         "include_tvt_input": flags["include_tvt_input"],
         "include_geometry": flags["include_geometry"],
         "include_gr": flags["include_gr"],
+        "include_trajectory": flags["include_trajectory"],
         "include_typewell": flags["include_typewell"],
     }
 
@@ -140,6 +143,7 @@ def _payload_feature_flags(payload: dict[str, Any]) -> dict[str, bool]:
         include_tvt_input=stored.get("include_tvt_input", payload.get("include_tvt_input", False)),
         include_geometry=stored.get("include_geometry", payload.get("include_geometry", False)),
         include_gr=stored.get("include_gr", payload.get("include_gr", False)),
+        include_trajectory=stored.get("include_trajectory", payload.get("include_trajectory", False)),
         include_typewell=stored.get("include_typewell", payload.get("include_typewell", False)),
     )
 

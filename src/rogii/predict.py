@@ -18,6 +18,7 @@ def run_predict(
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
+    include_trajectory: bool = False,
     include_typewell: bool = False,
     residual_target: bool = False,
     feature_columns: list[str] | None = None,
@@ -41,6 +42,7 @@ def run_predict(
                 include_tvt_input=use_tvt_feature,
                 include_geometry=include_geometry,
                 include_gr=include_gr,
+                include_trajectory=include_trajectory,
                 typewell=typewell_frame,
                 include_typewell=include_typewell,
             )
