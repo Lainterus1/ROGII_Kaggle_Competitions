@@ -59,6 +59,7 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Implemented Roadmap R2: 15 typewell-reference features (11 anchor-offset + 4 summary). CV degraded to 14.75 → not promoted. Added `ADR-005`.
 - Ran feature importance ablation on R1: dropped 20 zero/low-importance features (GR_is_missing, MD_delta, row_position, 5 rolling windows, 8 lag/leads, gr_d1, gr_d2, gr_envelope). Final set: 18 features with identical CV (14.19).
 - Added `docs/HOW_IT_WORKS.md` — feature-by-feature explanation with importance analysis and ablation rationale.
+- Kaggle submission R1: official LB RMSE **12.247** (49% improvement over Stage 4 LB 24.114). LB better than CV (−2.0 gap).
 
 ## Open questions
 

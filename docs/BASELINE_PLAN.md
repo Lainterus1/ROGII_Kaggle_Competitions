@@ -82,3 +82,12 @@ Kaggle run (2026-06-05):
 - Kaggle CV RMSE: `20.58 ± 3.99` (5 folds, 3.78M rows, 773 wells)
 - Official LB RMSE: `24.114`
 - LB/CV gap: `+3.5` (reasonable for Kaggle)
+
+Kaggle run R1 (2026-06-05):
+
+- Notebook: `notebooks/00_kaggle_thin_runner.ipynb` (offline, uses `rogii-repo` Kaggle Dataset)
+- Model: LightGBM, 18 features (6 base + 9 geometry + 3 GR), residual delta target
+- Kaggle CV RMSE: `~14.19` (5 folds, 3.78M rows, 773 wells) — estimated from local run
+- Official LB RMSE: **`12.247`**
+- LB/CV gap: `−2.0` **(LB BETTER than CV — test wells easier than train)**
+- 49% improvement over Stage 4 LB (24.114 → 12.247)

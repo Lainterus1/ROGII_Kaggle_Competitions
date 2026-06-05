@@ -40,7 +40,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Roadmap R1: implement residual target plus deterministic GR and geometry features |
 | Done | High | Roadmap R2: implement simple typewell-reference features after leakage review (degraded CV, not promoted) |
 | Done | High | R1 feature ablation: remove 20 zero/low-importance features, finalize 18-feature set with identical CV |
-| Pending | High | Submit R1 optimized model to Kaggle |
+| Done | High | Submit R1 optimized model to Kaggle (LB: 12.247, 49% improvement over Stage 4) |
 | Pending | Medium | Roadmap R3: implement multi-seed LightGBM and simple ensemble |
 | Pending | Medium | Decide whether to add CatBoost as a new dependency for Roadmap R3 |
 

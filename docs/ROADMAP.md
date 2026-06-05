@@ -46,7 +46,7 @@ Future work should branch from this baseline without rewriting its recorded resu
 
 Goal: make the model predict `TVT - last_tvt_input` and add deterministic GR/trajectory features inspired by reviewed public notebooks.
 
-Result: LightGBM, 18 features (6 base + 9 geometry + 3 GR), residual delta target, CV RMSE `14.19 ± 0.89` (GroupKFold 5-fold, 3.78M post-PS rows, 773 wells). ~31% improvement over frozen Stage 4 baseline (20.58 → 14.19). After feature ablation: 20 zero/low-importance features removed with zero CV regression. Full feature rationale in `docs/HOW_IT_WORKS.md`.
+Result: LightGBM, 18 features (6 base + 9 geometry + 3 GR), residual delta target. Local CV RMSE `14.19 ± 0.89`. Kaggle LB RMSE **`12.247`** — LB BETTER than CV (49% improvement over Stage 4 LB 24.114). After feature ablation: 20 zero/low-importance features removed with zero CV regression. Full feature rationale in `docs/HOW_IT_WORKS.md`.
 
 Scope:
 
