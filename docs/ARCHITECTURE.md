@@ -59,7 +59,7 @@ The project will use:
 | Prediction | Load trained model/config and produce predictions | `src/rogii/predict.py`, `scripts/run_predict.py` |
 | Submission | Validate and write `submission.csv` | `src/rogii/submission.py`, `scripts/validate_submission.py` |
 | MLflow tracking | Centralized run metadata, metrics and artifacts | `src/rogii/mlflow_utils.py` |
-| Kaggle runner | Thin execution wrapper for Kaggle | `scripts/kaggle_runner.py`, `notebooks/00_kaggle_thin_runner.ipynb` |
+| Kaggle runner | Thin execution wrappers for Kaggle: training and inference | `scripts/kaggle_runner.py`, `notebooks/00_kaggle_inference.ipynb`, `notebooks/01_kaggle_train.ipynb` |
 | Tests | Submission, validation, metric and smoke contracts | `tests/` |
 
 ## Boundaries

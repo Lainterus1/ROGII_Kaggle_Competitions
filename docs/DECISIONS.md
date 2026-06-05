@@ -317,6 +317,47 @@ The previous pending roadmap still contained a generic model-upgrade stage and a
 - Update Kaggle notebook instructions after each push intended for Kaggle runs.
 - Record every meaningful CV/LB result in `docs/EXPERIMENT_LOG.md`.
 
+## ADR-007: Separate training and inference Kaggle notebooks with model artifact dataset
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+The previous single notebook `00_kaggle_thin_runner.ipynb` ran both training and prediction every time, requiring ~10-20 min of 5-fold CV training for every submission even when the model was unchanged. This is a standard Kaggle workflow problem.
+
+### Decision
+
+- Split into two notebooks: training (`01_kaggle_train.ipynb`) and inference (`00_kaggle_inference.ipynb`).
+- Training notebook saves the model to `/kaggle/working/baseline_lgbm.pkl`; the user creates a private Kaggle Dataset `rogii-models` from this output.
+- Inference notebook loads the pre-trained model from the `rogii-models` dataset and runs only prediction — no training, no feature flags needed (model payload auto-detects feature config).
+- Both notebooks remain offline (internet OFF), using the `rogii-repo` Kaggle Dataset for code.
+- Model payload carries full metadata (feature flags, feature columns, residual target mode) so the inference notebook does not need any CLI feature flags.
+
+### Alternatives considered
+
+- Single notebook with conditional train/predict. Rejected — Kaggle notebook state is ephemeral; separating into two notebooks with a shared Dataset artifact is the standard Kaggle pattern.
+- Git clone with internet ON. Rejected — competition rules may require offline notebooks for submission.
+
+### Consequences
+
+#### Positive
+
+- Submission cycle drops from ~10-20 min to ~30 sec (prediction only).
+- Training only runs when the model or features actually change.
+- Clean separation of concerns: train produces artifact, inference consumes it.
+- Compatible with offline execution requirements.
+
+#### Negative
+
+- Requires manual creation of `rogii-models` Kaggle Dataset after each training run.
+- Two notebooks to maintain instead of one.
+
+#### Follow-up
+
+- Update `configs/paths.kaggle.yaml` with model input path.
+- Update Kaggle notebook instructions in `docs/ROADMAP.md` after each code push.
+
 ## Open questions
 
 - None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.

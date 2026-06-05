@@ -48,7 +48,7 @@ The Stage 4 baseline remains frozen as the historical reference baseline in `doc
 - Add new dependencies only as approved staged dependencies: `PyWavelets`, `scipy`, `catboost` and optionally `torch`.
 - Promote a stage only after tests pass, leakage review passes, submission validation passes, and CV improves or the stage produces useful diagnostics.
 - Kaggle submission is always manual. The project may generate and validate `submission.csv`, but the user performs the actual submit.
-- After a code push intended for Kaggle, provide exact notebook-edit instructions for the competition notebook.
+- After a code push intended for Kaggle, update the `rogii-repo` Kaggle Dataset, then run `01_kaggle_train.ipynb` (if model changed) and `00_kaggle_inference.ipynb` (for submission).
 
 ## Standard Gate After Each Stage
 
@@ -61,7 +61,7 @@ The Stage 4 baseline remains frozen as the historical reference baseline in `doc
 7. Update `docs/EXPERIMENT_LOG.md` after meaningful runs.
 8. Update `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/VALIDATION_STRATEGY.md` or `docs/KNOWN_ISSUES.md` when stage status, validation contracts or risks change.
 9. Do not commit `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`, OOF artifacts or generated submissions.
-10. Ask the user before any real Kaggle submission; no automatic submission path is planned.
+10. After a code push: update `rogii-repo` Kaggle Dataset → run `01_kaggle_train.ipynb` to rebuild model → update `rogii-models` Kaggle Dataset → run `00_kaggle_inference.ipynb` for submission.
 
 ## Stage A0: Pipeline Contracts and Roadmap Reset
 
@@ -75,7 +75,7 @@ Scope:
 - Keep R1 optimized as the active baseline and Stage 4 as the historical frozen baseline.
 - Ensure model payloads carry enough metadata to reproduce prediction: feature flags, target mode, feature columns and run name.
 - Sync README and config examples with the currently supported CLI commands.
-- Keep Kaggle workflow manual: code push -> user updates competition notebook commands -> notebook generates validated output -> user submits manually.
+- Keep Kaggle workflow: training notebook (`01_kaggle_train.ipynb`) saves model to `rogii-models` Kaggle Dataset; inference notebook (`00_kaggle_inference.ipynb`) loads model and generates submission (ADR-007).
 
 Primary files:
 

@@ -51,7 +51,8 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Pending | High | Stage A3a: implement DTW typewell alignment features after rollback checkpoint |
 | Pending | High | Stage A3b: evaluate signed-log residual and derivative target engineering separately |
 | Pending | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
-| Pending | Medium | After each code push intended for Kaggle, provide exact competition notebook edit instructions |
+| Done | High | Split Kaggle runner into separate training and inference notebooks (ADR-007) |
+| Pending | Medium | After each code push intended for Kaggle, provide exact notebook edit instructions |
 
 ## Open questions
 
