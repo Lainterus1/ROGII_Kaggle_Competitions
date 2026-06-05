@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rogii.data_loading import sample_submission_path
+from rogii.model_io import make_feature_flags, resolve_prediction_contract
 from rogii.predict import run_predict
 from rogii.submission import validate_submission
 
@@ -33,35 +34,34 @@ def main() -> None:
     with open(args.model, "rb") as f:
         payload = pickle.load(f)
 
-    if isinstance(payload, dict):
-        model = payload["model"]
-        residual_target = payload.get("residual_target", False)
-        include_geometry = args.include_geometry or payload.get("include_geometry", False)
-        include_gr = args.include_gr or payload.get("include_gr", False)
-        include_typewell = args.include_typewell or payload.get("include_typewell", False)
-    else:
-        model = payload
-        residual_target = False
-        include_geometry = args.include_geometry
-        include_gr = args.include_gr
-        include_typewell = args.include_typewell
-
-    if args.residual_target:
-        residual_target = True
+    contract = resolve_prediction_contract(
+        payload,
+        cli_feature_flags=make_feature_flags(
+            include_tvt_input=args.include_tvt_input,
+            include_geometry=args.include_geometry,
+            include_gr=args.include_gr,
+            include_typewell=args.include_typewell,
+        ),
+        cli_residual_target=args.residual_target,
+    )
+    flags = contract.feature_flags
 
     submission = run_predict(
         args.data_dir,
-        model,
-        include_tvt_input=args.include_tvt_input,
-        include_geometry=include_geometry,
-        include_gr=include_gr,
-        include_typewell=include_typewell,
-        residual_target=residual_target,
+        contract.model,
+        include_tvt_input=flags["include_tvt_input"],
+        include_geometry=flags["include_geometry"],
+        include_gr=flags["include_gr"],
+        include_typewell=flags["include_typewell"],
+        residual_target=contract.residual_target,
+        feature_columns=contract.feature_columns,
     )
     submission.to_csv(output, index=False)
 
     result = validate_submission(sample_submission_path(args.data_dir), output)
-    print(f"Prediction mode: {'residual (delta->TVT)' if residual_target else 'direct (TVT)'}")
+    print(f"Prediction mode: {'residual (delta->TVT)' if contract.residual_target else 'direct (TVT)'}")
+    if contract.feature_columns is not None:
+        print(f"Feature columns ({len(contract.feature_columns)}): {contract.feature_columns}")
     print(f"Submission rows: {result.rows}")
     print(f"Wrote submission: {output}")
 

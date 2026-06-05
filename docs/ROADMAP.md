@@ -23,37 +23,108 @@ Post-baseline improvement stages, priorities, promotion gates, high-risk deferre
 
 ## Current content
 
-The Stage 4 baseline is frozen as the reference baseline:
+Current best clean baseline:
 
-- Model: LightGBM with `safe_numeric_v1 + last_tvt_input`.
-- Validation: 5-fold `GroupKFold` by well.
-- Recorded result: Kaggle CV RMSE `20.58 +/- 3.99`, public LB RMSE `24.114`.
-- Source of truth for frozen baseline details: `docs/BASELINE_PLAN.md` and `docs/EXPERIMENT_LOG.md`.
+| Item | Value |
+|---|---|
+| Stage | R1 optimized |
+| Model | LightGBM |
+| Features | 18 features: 6 base + 9 geometry + 3 GR |
+| Target | `residual = TVT - last_tvt_input` |
+| Validation | 5-fold `GroupKFold` by well |
+| Local/Kaggle CV | RMSE `~14.19` |
+| Public LB | RMSE `12.247` |
+| Explanation | `docs/HOW_IT_WORKS.md` |
 
-Future work should branch from this baseline without rewriting its recorded result.
+The Stage 4 baseline remains frozen as the historical reference baseline in `docs/BASELINE_PLAN.md`. R1 optimized is the active comparison point for new work. The old pending model-upgrade roadmap is superseded by the staged plan below.
 
 ## Guiding constraints
 
 - Keep core logic in `src/rogii/` and executable entry points in `scripts/`.
 - Keep Kaggle notebooks thin runners.
-- Keep group-aware validation by well unless a documented decision changes it.
-- Use public notebooks only for understood ideas, not copied code or opaque artifacts.
-- Do not use public saved model artifacts, TabICL artifacts or exact train/test coordinate overlap blending in the clean mainline roadmap.
+- Keep `GroupKFold` by well as the primary validation strategy unless a documented decision changes it.
 - Treat `TVT_input` as allowed only up to Prediction Start; never use post-PS labels or target-derived columns as features.
-- Promote a stage only after tests pass, submission validation passes and CV improves or the stage produces useful diagnostics.
+- Do not use public saved model artifacts, TabICL artifacts or exact train/test coordinate overlap blending in the clean mainline roadmap.
+- Add new dependencies only as approved staged dependencies: `PyWavelets`, `scipy`, `catboost` and optionally `torch`.
+- Promote a stage only after tests pass, leakage review passes, submission validation passes, and CV improves or the stage produces useful diagnostics.
+- Kaggle submission is always manual. The project may generate and validate `submission.csv`, but the user performs the actual submit.
+- After a code push intended for Kaggle, provide exact notebook-edit instructions for the competition notebook.
 
-## Stage R1: Residual GR and Geometry Features ✅ Done
+## Standard Gate After Each Stage
 
-Goal: make the model predict `TVT - last_tvt_input` and add deterministic GR/trajectory features inspired by reviewed public notebooks.
+1. Run `python -m pytest tests`.
+2. Run full 5-fold GroupKFold CV for the candidate stage.
+3. Compare against R1 optimized and the latest promoted stage.
+4. Run leakage review for every new feature family or target transform.
+5. Generate a candidate submission only in an ignored runtime path such as `outputs/submission.csv` or `/kaggle/working/submission.csv`.
+6. Run `python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv` locally or the Kaggle-equivalent command in the notebook.
+7. Update `docs/EXPERIMENT_LOG.md` after meaningful runs.
+8. Update `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/VALIDATION_STRATEGY.md` or `docs/KNOWN_ISSUES.md` when stage status, validation contracts or risks change.
+9. Do not commit `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`, OOF artifacts or generated submissions.
+10. Ask the user before any real Kaggle submission; no automatic submission path is planned.
 
-Result: LightGBM, 18 features (6 base + 9 geometry + 3 GR), residual delta target. Local CV RMSE `14.19 ± 0.89`. Kaggle LB RMSE **`12.247`** — LB BETTER than CV (49% improvement over Stage 4 LB 24.114). After feature ablation: 20 zero/low-importance features removed with zero CV regression. Full feature rationale in `docs/HOW_IT_WORKS.md`.
+## Stage A0: Pipeline Contracts and Roadmap Reset
+
+Goal: make the new staged roadmap executable before adding high-risk features.
+
+Status: Done. Train can load `configs/baseline_lgbm.yaml`; saved model payloads include feature flags and exact feature columns; predict validates the generated feature matrix against the saved payload before writing a submission.
 
 Scope:
 
-- Add residual target handling: train on `target_delta = TVT - last_tvt_input`.
-- Add prediction reconstruction: `pred_tvt = last_tvt_input + pred_delta`.
-- Add geometry features: `md_since_ps`, `frac_after_ps`, `dx_since_ps`, `dy_since_ps`, `dz_since_ps`, `dxy_since_ps`, `dxdmd`, `dydmd`, `dzdmd`.
-- Add GR features: rolling means/stds for windows `5, 21, 51, 101`, lags/leads `1, 5, 15, 30`, `gr_d1`, `gr_d2`, `gr_energy`, `gr_envelope`.
+- Replace old pending roadmap items with stages A1-A4.
+- Keep R1 optimized as the active baseline and Stage 4 as the historical frozen baseline.
+- Ensure model payloads carry enough metadata to reproduce prediction: feature flags, target mode, feature columns and run name.
+- Sync README and config examples with the currently supported CLI commands.
+- Keep Kaggle workflow manual: code push -> user updates competition notebook commands -> notebook generates validated output -> user submits manually.
+
+Primary files:
+
+- `docs/ROADMAP.md`
+- `docs/TASKS.md`
+- `docs/DECISIONS.md`
+- `docs/KNOWN_ISSUES.md`
+- `README.md`
+- `configs/baseline_lgbm.yaml`
+- `src/rogii/config.py`
+- `src/rogii/model_io.py`
+- `src/rogii/train.py`
+- `src/rogii/predict.py`
+- `scripts/run_train.py`
+- `scripts/run_predict.py`
+- `tests/test_model_io.py`
+- `tests/test_predict_contract.py`
+
+Verification:
+
+- `python -m pytest tests`
+- `python scripts/run_train.py --help`
+- `python scripts/run_predict.py --help`
+- `PYTHONPATH=src python -c "from rogii.config import load_yaml_config; c=load_yaml_config('configs/baseline_lgbm.yaml'); assert c['features']['residual_target'] is True"` or PowerShell equivalent.
+- `git diff -- docs/ROADMAP.md docs/TASKS.md docs/DECISIONS.md docs/KNOWN_ISSUES.md README.md`
+
+Promotion gate:
+
+- New roadmap is the only active development plan and old pending tasks are explicitly cancelled or replaced.
+
+## Stage A1: Spatial Kinematics and Trajectory Geometry
+
+Goal: improve the tree model's representation of 3D trajectory curves without changing the model family.
+
+Feature scope:
+
+- `z_local_delta`: current `Z` minus the mean pre-PS `Z` for the same well.
+- `z_ps_residual`: current `Z` minus `Z` at Prediction Start.
+- `dip_angle_proxy_10`: `(Z_i - Z_{i-10}) / (MD_i - MD_{i-10})`.
+- `dogleg_severity_10m`: local 3D direction change over approximately 10m MD.
+- `tortuosity_window_50`: arc length over approximately 50m MD divided by straight-line 3D distance.
+- `sin_azimuth` and `cos_azimuth`: directional drilling azimuth encoded from `atan2(dY, dX)`.
+
+Implementation notes:
+
+- Add this as a separate feature family, not by rewriting the current R1 `GEOMETRY_FEATURES` contract.
+- Prefer a new constant such as `TRAJECTORY_FEATURES` and a CLI/model payload flag such as `include_trajectory`.
+- Use only `MD`, `X`, `Y`, `Z`, `GR` and pre-PS location information from `TVT_input` null boundary.
+- Fill early-window and zero-distance edge cases deterministically with finite values.
 
 Primary files:
 
@@ -62,97 +133,198 @@ Primary files:
 - `src/rogii/predict.py`
 - `scripts/run_train.py`
 - `scripts/run_predict.py`
-- `configs/baseline_lgbm.yaml`
 - `tests/test_feature_engineering.py`
 - `tests/test_no_target_leakage.py`
-- `tests/test_smoke_pipeline.py`
 
 Verification:
 
+- Synthetic tests for straight-line wells, curved wells, single-row wells and zero MD deltas.
 - `python -m pytest tests`
-- `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-tvt-input`
-- `python scripts/run_predict.py --data-dir data --model models/baseline_lgbm.pkl --output outputs/submission.csv --include-tvt-input`
-- `python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv`
+- Candidate train command: `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --include-trajectory --residual-target --output-model models/a1_lgbm.pkl`
+- Candidate predict command after train: `python scripts/run_predict.py --data-dir data --model models/a1_lgbm.pkl --output outputs/a1_submission.csv`
+- Submission validation: `python scripts/validate_submission.py --data-dir data --submission outputs/a1_submission.csv`
 
 Promotion gate:
 
-- Promote as the default next baseline only if validation stays leakage-safe and CV improves or provides clearly useful diagnostics.
+- Promote only if leakage tests pass and CV improves over R1 optimized or feature importance gives strong evidence for keeping the block.
 
-## Stage R2: Typewell Features V1 ❌ Degraded
+## Stage A2: GR DWT and Strict OOF Spatial KNN
 
-Goal: add simple, explainable typewell-reference features before heavier alignment methods.
+Goal: extract deeper GR structure and add safe inter-well spatial context without target leakage.
 
-Result: LightGBM, 53 features (R1 38 + 15 typewell), residual delta target, CV RMSE `14.75 ± 0.77`. **+0.66 degradation vs R1 (14.09)**. Typewell features rejected for current baseline due to CV regression. Likely cause: `tw_gr_residual_*` features ≈ `GR - const`, adding redundant correlated columns without new signal. May revisit with feature selection or different typewell alignment strategy in future roadmap stage.
+### Stage A2a: Causal GR DWT
 
-Decision: Do not promote. Keep R1 as the best current baseline. Submit R1 to Kaggle.
+Feature scope:
 
-Scope:
+- Add approved dependency `PyWavelets`.
+- `gr_dwt_approx`: low-frequency GR approximation.
+- `gr_dwt_detail_energy`: trailing-window detail energy.
 
-- Add `read_typewell_well(data_dir, split, well_id)` to data loading.
-- Pass each well's typewell frame into feature construction.
-- Interpolate typewell `GR` by `TVT`.
-- Add anchor-offset residual features comparing horizontal `GR` to typewell `GR` at `last_tvt_input + offset`.
-- Start with offsets `[-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80]`.
-- Add simple typewell summary features such as `tw_range`, `tw_gr_mean`, `tw_gr_std`, `tw_gr_at_last_tvt`.
+Implementation notes:
+
+- Use causal or expanding/trailing windows only. Feature value at row `i` must not depend on `GR` after `i` unless a later ADR explicitly allows full-test-log context for this feature family.
+- First run a runtime spike on a small subset before full CV.
+- If DWT is too slow on full data, keep it as a diagnostic branch and do not promote.
 
 Primary files:
 
-- `src/rogii/data_loading.py`
+- `requirements.txt`
+- `src/rogii/features.py` or new `src/rogii/gr_features.py`
+- `tests/test_feature_engineering.py`
+- `tests/test_no_target_leakage.py`
+
+### Stage A2b: Strict OOF Spatial KNN
+
+Feature scope:
+
+- Build KNN features for `k = 5`, `10`, `50` in 3D space.
+- Add `spatial_nn{k}_mean_tvt`, `spatial_nn{k}_median_tvt`, `spatial_nn{k}_std_tvt`.
+
+OOF contract:
+
+- For validation fold K, build the reference tree only from wells outside fold K.
+- Reference rows are only pre-PS rows.
+- Reference target is pre-PS known `TVT_input`, not post-PS `TVT`.
+- Validation wells must never appear in their own spatial reference tree.
+- Test-time tree uses train pre-PS reference rows only by default; test pre-PS rows are excluded for a stricter train/test contract.
+
+Primary files:
+
+- New `src/rogii/spatial_features.py`
+- `src/rogii/train.py`
+- `src/rogii/predict.py`
+- `src/rogii/validation.py`
+- `tests/test_spatial_oof.py`
+- `tests/test_no_target_leakage.py`
+
+Verification:
+
+- Tests prove validation groups are excluded from the tree.
+- Tests prove post-PS target rows are excluded from the reference set.
+- Tests prove target column `TVT` is not used to build reference values.
+- Full CV must be inspected for suspicious leakage.
+
+Rollback rule:
+
+- If CV drops to an implausibly low range such as RMSE `2-3`, stop immediately, do not submit, disable the spatial block and audit OOF construction.
+
+Promotion gate:
+
+- Promote only if OOF leakage tests pass, CV improvement is plausible, and Kaggle LB does not show a severe CV/LB mismatch after manual submission.
+
+## Stage A3: DTW Typewell Alignment and Target Engineering
+
+Goal: revisit typewell information with elastic alignment and address residual-target flattening risk.
+
+Prerequisite:
+
+- Before implementation starts, create a clean rollback checkpoint after tests pass. Commit only after explicit user approval.
+
+### Stage A3a: Typewell DTW Features
+
+Feature scope:
+
+- Align horizontal `GR` to typewell `GR` with Dynamic Time Warping or a Viterbi-style constrained path.
+- Add `dtw_optimal_tvt` as an anchor-depth feature.
+- Add `dtw_cost_cumulative` as a path-cost feature.
+
+Rules:
+
+- Do not use raw DTW output as the final answer.
+- Do not use train post-PS `TVT` to guide alignment.
+- Keep Typewell V1 rejected unless a new alignment approach beats R1/A-stage baselines.
+
+Primary files:
+
+- New `src/rogii/typewell_alignment.py`
 - `src/rogii/features.py`
 - `src/rogii/train.py`
 - `src/rogii/predict.py`
-- `tests/test_feature_engineering.py`
+- `tests/test_dtw_features.py`
 - `tests/test_no_target_leakage.py`
 
-Verification:
+### Stage A3b: Target Engineering
 
-- `python -m pytest tests`
-- Repeat Stage R1 train, predict and submission validation commands.
+Options to evaluate separately:
 
-Promotion gate:
-
-- Promote only after leakage review confirms typewell features use information available at prediction time and CV improves or feature importance supports keeping the block.
-
-## Stage R3: Model Upgrade and Simple Ensemble
-
-Goal: improve model strength without opaque public artifacts.
-
-Scope:
-
-- Add multi-seed LightGBM runs, starting with seeds `42`, `7`, `123`.
-- Add a simple saved ensemble object that can be loaded by `run_predict.py`.
-- Evaluate simple OOF average before more flexible stacking.
-- Add CatBoost only after explicit user approval because it adds a new dependency.
-- If CatBoost is approved, train CatBoost under the same folds and feature set.
-- Consider non-negative ridge stacking only after OOF predictions are saved and validated.
+- Signed-log residual: `sign(x) * log1p(abs(x))` with inverse transform before TVT-scale RMSE.
+- Parallel derivative model: predict `d(TVT)/d(MD)` and combine with residual prediction.
 
 Primary files:
 
+- New `src/rogii/target.py`
+- `src/rogii/train.py`
+- `src/rogii/predict.py`
+- `tests/test_target_transforms.py`
+
+Verification:
+
+- Always report RMSE in reconstructed TVT scale, not only transformed target space.
+- Compare OOF prediction variance against OOF target variance.
+- Inspect per-well prediction dispersion to detect flattening.
+
+Rollback rule:
+
+- If predicted TVT curves lose dispersion or TVT-scale RMSE degrades, revert to the plain residual target.
+
+Promotion gate:
+
+- Promote DTW and target changes only if they improve TVT-scale CV and do not create flattening, leakage or unacceptable runtime.
+
+## Stage A4: Structural Blending and Pipeline-Dependent Models
+
+Goal: improve generalization through diverse models and standardized OOF predictions.
+
+Scope:
+
+- Standardize OOF prediction artifacts for stacking under ignored runtime directories.
+- Add multi-seed LightGBM averaging, starting with seeds `42`, `7`, `123`.
+- Add CatBoost with Ordered Boosting after dependency installation is verified.
+- Fit CatBoost on the same folds and feature set as the promoted tabular baseline.
+- Add Ridge stacking or weighted averaging over OOF predictions.
+- Consider a 1D CNN only after separate approval of the optional `torch` dependency and runtime budget.
+
+Primary files:
+
+- New `src/rogii/oof.py`
+- New `src/rogii/ensemble.py`
 - `src/rogii/models.py`
 - `src/rogii/train.py`
 - `src/rogii/predict.py`
 - `scripts/run_train.py`
 - `scripts/run_predict.py`
-- `configs/baseline_lgbm.yaml`
-- `requirements.txt` only if CatBoost is approved.
+- `requirements.txt`
+- `tests/test_ensemble.py`
 
 Verification:
 
 - `python -m pytest tests`
-- Train/predict/validate commands from Stage R1.
-- Compare single-model OOF RMSE, average-ensemble OOF RMSE and any stack OOF RMSE.
+- Compare single-model OOF RMSE, multi-seed average OOF RMSE and stacking OOF RMSE.
+- Validate that OOF artifacts contain no raw target columns beyond allowed prediction/target arrays needed for local scoring.
+- Generate and validate submission from the final blended model.
 
 Promotion gate:
 
-- Promote ensemble only if OOF improves over the best single model without unacceptable runtime or dependency cost.
+- Promote only if ensemble OOF improves over the best single model and Kaggle runtime remains acceptable.
 
-## Deferred Ideas
+## Stop Criteria
+
+| Signal | Action |
+|---|---|
+| Spatial KNN CV drops to implausibly low RMSE such as `2-3` | Stop, disable spatial features, run leakage audit |
+| CV improves but public LB sharply worsens | Do not promote; document CV/LB gap |
+| Feature block degrades CV by more than `0.3` RMSE without useful diagnostics | Disable or keep as rejected experiment |
+| Target transform improves transformed-space score but worsens TVT RMSE | Revert to plain residual target |
+| Predicted TVT variance collapses | Revert target/model change and inspect per-well predictions |
+| Runtime exceeds Kaggle limits | Simplify or defer the block |
+| New dependency is unstable in Kaggle | Revert dependency and keep branch local until resolved |
+
+## Rejected or Deferred Ideas
 
 | Idea | Status | Reason |
 |---|---|---|
-| Beam search GR-to-typewell alignment | Deferred | Promising but heavier than R1/R2; implement after simple features stabilize |
-| Multi-scale self-correlation | Deferred | Deterministic and useful, but belongs after typewell v1 |
-| Formation-plane KNN and dense ANCC | Deferred | Must be fold-aware to avoid validation leakage |
-| Particle filters | Deferred | Complex and stochastic; needs reproducibility tests |
-| TabICL/public artifact stack | Rejected for clean mainline | Opaque external artifacts and heavy dependency path |
+| Simple Typewell V1 anchor residuals | Rejected | CV degraded and features were mostly `GR - const` redundancy |
+| Public saved artifacts / TabICL artifact stack | Rejected for clean mainline | Opaque external artifacts and heavy dependency path |
 | Exact train/test coordinate overlap blend | Rejected for clean mainline | High leakage risk; may be studied only as a separate diagnostic with explicit approval |
+| Particle filters | Deferred | Complex and stochastic; revisit only after A1-A4 evidence |
+| 1D CNN | Optional | Requires separate runtime/dependency approval after tabular ensemble |

@@ -25,22 +25,23 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 
 ## Текущий статус
 
-Bootstrap проекта в процессе.
+Текущий лучший clean baseline: R1 optimized.
 
 Готово:
 
-- Документ с контекстом проекта.
-- Skeleton source-of-truth документации.
-- Начальное решение по balanced-архитектуре.
-- Начальный skeleton проекта.
 - Data inventory CLI.
 - Submission validator.
 - Naive last-known-`TVT_input` baseline.
+- Stage 4 LightGBM + `last_tvt_input` reference baseline: public LB RMSE `24.114`.
+- R1 optimized LightGBM baseline: 18 features, residual target `TVT - last_tvt_input`, CV RMSE `~14.19`, public LB RMSE `12.247`.
+- `docs/HOW_IT_WORKS.md` with feature-by-feature explanation.
+- New staged roadmap A0-A4 for trajectory features, DWT, strict OOF spatial KNN, DTW, target engineering and structural blending.
 
-Еще не готово:
+Следующее:
 
-- First ML baseline.
-- MLflow model run logging.
+- Stage A0: sync CLI/config/README/model-payload contracts before implementing new feature blocks.
+- Stage A1: implement spatial kinematics and trajectory geometry features.
+- Kaggle submissions remain manual only. After a push intended for Kaggle, the agent should provide exact competition notebook edit instructions.
 
 ## Планируемая установка
 
@@ -55,18 +56,27 @@ python -m pip install -r requirements.txt
 Реализованные команды:
 
 ```bash
-pytest tests/
+python -m pytest tests
 python scripts/make_data_inventory.py --data-dir data
 python scripts/run_naive_baseline.py --data-dir data --output outputs/submission.csv
 python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
+python scripts/run_train.py --config configs/baseline_lgbm.yaml --data-dir data
+python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --residual-target --output-model models/r1_lgbm.pkl
+python scripts/run_predict.py --data-dir data --model models/r1_lgbm.pkl --output outputs/submission.csv
+python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
 ```
 
-Планируемые команды для следующих шагов:
+Модели, сохраненные новым train payload, сами хранят feature flags и список колонок. Для таких моделей `run_predict.py` не должен получать повторные `--include-*` флаги, если только это не legacy-модель без payload metadata.
 
-```bash
-python scripts/run_smoke.py --config configs/baseline_lgbm.yaml
-python scripts/run_train.py --config configs/baseline_lgbm.yaml --env local
-```
+Планируемые команды будут добавляться по мере реализации этапов A1-A4. Не использовать несуществующие флаги из плана до соответствующей реализации в `scripts/`.
+
+Kaggle workflow:
+
+- Код разрабатывается локально и пушится в GitHub или обновляется в Kaggle Dataset, в зависимости от текущего notebook workflow.
+- Ноутбук соревнования остается thin runner: install/prepare repo, run train, run predict, run validator.
+- `submission.csv` генерируется и валидируется в `/kaggle/working`.
+- Фактический submit на Kaggle выполняет только пользователь вручную.
+- После подтверждения пуша в Kaggle агент должен написать точные инструкции, какие строки/команды изменить в ноутбуке соревнования.
 
 ## Документация
 

@@ -50,6 +50,24 @@ Stage 3 ML validation:
 - Target: TVT column.
 - Result: CV RMSE `120.06 ± 11.31` (5 folds) over `3,783,989` post-PS rows across `773` wells.
 
+Current active baseline validation:
+
+- Active comparison stage: R1 optimized.
+- Strategy: 5-fold `GroupKFold` by `well_id` on post-PS train rows.
+- Target: residual delta `TVT - last_tvt_input`, reconstructed to TVT for submission.
+- Features: 18 features (6 base + 9 geometry + 3 GR), documented in `docs/HOW_IT_WORKS.md`.
+- Result: CV RMSE `~14.19`, public LB RMSE `12.247`.
+
+Planned Stage A2 spatial KNN validation contract:
+
+- Spatial KNN features must be built fold-aware, not once on the full dataset before CV.
+- For validation fold K, the spatial reference set must contain only wells outside fold K.
+- Reference rows must be pre-PS rows only.
+- Reference values must come from known pre-PS `TVT_input`, not post-PS `TVT`.
+- Validation wells must never appear in their own KNN tree.
+- Test-time spatial KNN uses train pre-PS reference rows only by default; test pre-PS rows are excluded for a stricter train/test contract.
+- If spatial KNN produces implausibly low CV such as RMSE `2-3`, treat it as leakage until proven otherwise and do not submit.
+
 Required checks:
 
 - No group appears in both train and validation folds.
@@ -59,5 +77,4 @@ Required checks:
 
 ## Open questions
 
-- Should file prefix be materialized as an explicit `well_id` column during all loading paths?
-- How many folds are appropriate for available wells/groups?
+- None for the current roadmap. Default remains 5-fold `GroupKFold` by `well_id`.

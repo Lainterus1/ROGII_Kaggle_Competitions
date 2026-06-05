@@ -21,6 +21,7 @@ class TrainResult:
     cv_rmse_folds: list[float]
     train_rows: int
     train_wells: int
+    feature_columns: list[str]
     residual_target: bool = False
 
 
@@ -154,5 +155,6 @@ def run_train(
         cv_rmse_folds=cv_scores,
         train_rows=len(y),
         train_wells=len(np.unique(groups)),
+        feature_columns=list(X.columns),
         residual_target=residual_target,
     )

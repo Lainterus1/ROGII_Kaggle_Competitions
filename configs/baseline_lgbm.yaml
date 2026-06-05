@@ -1,5 +1,5 @@
 run:
-  name: baseline_lgbm
+  name: r1_lgbm_optimized
   type: model_baseline
   seed: 42
   environment: local
@@ -13,14 +13,39 @@ model:
     objective: regression
     learning_rate: 0.05
     n_estimators: 1000
-    random_state: 42
 
 features:
-  set_name: with_tvt_input
-  columns: [MD, X, Y, Z, GR, GR_is_missing, MD_delta, MD_relative, row_position, last_tvt_input]
-  include_tvt_input: true
+  set_name: r1_optimized
+  columns:
+    - MD
+    - X
+    - Y
+    - Z
+    - GR
+    - MD_relative
+    - md_since_ps
+    - frac_after_ps
+    - dx_since_ps
+    - dy_since_ps
+    - dz_since_ps
+    - dxy_since_ps
+    - dxdmd
+    - dydmd
+    - dzdmd
+    - gr_roll_mean_101
+    - gr_roll_std_101
+    - gr_energy
+  include_tvt_input: false
+  include_geometry: true
+  include_gr: true
+  include_typewell: false
+  residual_target: true
 
 validation:
   strategy: group_kfold
   n_splits: 5
   group_column: well_id
+
+artifacts:
+  model_path: models/r1_lgbm.pkl
+  submission_path: outputs/submission.csv

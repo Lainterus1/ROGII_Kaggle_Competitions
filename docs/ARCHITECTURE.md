@@ -54,7 +54,7 @@ The project will use:
 | Feature engineering | Safe feature construction after schema inspection | `src/rogii/features.py` |
 | Validation | Group-aware splits and leakage checks | `src/rogii/validation.py` |
 | Metrics | Local implementation of official Kaggle metric | `src/rogii/metrics.py` |
-| Models | Naive and classical ML model wrappers | `src/rogii/models.py` |
+| Models | Naive and classical ML model wrappers plus saved model payload contracts | `src/rogii/models.py`, `src/rogii/model_io.py` |
 | Training | Fit models, evaluate folds and log runs | `src/rogii/train.py`, `scripts/run_train.py` |
 | Prediction | Load trained model/config and produce predictions | `src/rogii/predict.py`, `scripts/run_predict.py` |
 | Submission | Validate and write `submission.csv` | `src/rogii/submission.py`, `scripts/validate_submission.py` |
@@ -80,9 +80,10 @@ The project will use:
 5. Feature logic builds leakage-audited train/test matrices.
 6. Validation logic creates local folds, preferably group-aware by well/group ID when available.
 7. Model training computes local scores and logs params, metrics and artifacts to MLflow.
-8. Prediction/submission code writes `submission.csv` with schema matching `sample_submission.csv`.
-9. Kaggle runner executes the same repository code on Kaggle full data.
-10. User manually submits validated output to Kaggle and records public LB score in docs and MLflow notes.
+8. Training saves a versioned model payload with target mode, feature flags and exact feature columns.
+9. Prediction validates the generated feature matrix against the saved payload before writing `submission.csv` with schema matching `sample_submission.csv`.
+10. Kaggle runner executes the same repository code on Kaggle full data.
+11. User manually submits validated output to Kaggle and records public LB score in docs and MLflow notes.
 
 ## Dependencies
 

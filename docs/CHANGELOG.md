@@ -60,6 +60,10 @@ Human-readable change history for documentation, structure, code, configs and wo
 - Ran feature importance ablation on R1: dropped 20 zero/low-importance features (GR_is_missing, MD_delta, row_position, 5 rolling windows, 8 lag/leads, gr_d1, gr_d2, gr_envelope). Final set: 18 features with identical CV (14.19).
 - Added `docs/HOW_IT_WORKS.md` — feature-by-feature explanation with importance analysis and ablation rationale.
 - Kaggle submission R1: official LB RMSE **12.247** (49% improvement over Stage 4 LB 24.114). LB better than CV (−2.0 gap).
+- Replaced the old pending roadmap with the staged A0-A4 plan for trajectory features, DWT, strict OOF spatial KNN, DTW, target engineering and structural blending.
+- Accepted manual-only Kaggle submission policy for all future stages and added notebook-instruction follow-up after pushes intended for Kaggle.
+- Completed Stage A0: added versioned model payload contracts with feature flags and feature columns, config-based train loading, predict-time feature-column validation and updated R1 config/README commands.
+- Updated `leakage-review` and `kaggle-runner` project skills for strict OOF spatial KNN, target-transform checks and manual-only Kaggle notebook workflow.
 
 ## Open questions
 

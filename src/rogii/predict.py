@@ -8,6 +8,7 @@ from lightgbm import LGBMRegressor
 
 from rogii.data_loading import read_horizontal_well, read_sample_submission, read_typewell
 from rogii.features import build_features, last_known_tvt_input_value, post_ps_mask
+from rogii.model_io import validate_feature_columns
 from rogii.models import parse_submission_id
 
 
@@ -19,6 +20,7 @@ def run_predict(
     include_gr: bool = False,
     include_typewell: bool = False,
     residual_target: bool = False,
+    feature_columns: list[str] | None = None,
 ) -> pd.DataFrame:
     sample = read_sample_submission(data_dir)
     if list(sample.columns) != ["id", "tvt"]:
@@ -42,6 +44,8 @@ def run_predict(
                 typewell=typewell_frame,
                 include_typewell=include_typewell,
             )
+            ordered_columns = validate_feature_columns(list(feats.columns), feature_columns)
+            feats = feats.loc[:, ordered_columns]
             well_cache[well_id] = feats
             if residual_target:
                 last_tvt = last_known_tvt_input_value(horizontal)

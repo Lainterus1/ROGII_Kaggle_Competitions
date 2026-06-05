@@ -41,11 +41,18 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Roadmap R2: implement simple typewell-reference features after leakage review (degraded CV, not promoted) |
 | Done | High | R1 feature ablation: remove 20 zero/low-importance features, finalize 18-feature set with identical CV |
 | Done | High | Submit R1 optimized model to Kaggle (LB: 12.247, 49% improvement over Stage 4) |
-| Pending | Medium | Roadmap R3: implement multi-seed LightGBM and simple ensemble |
-| Pending | Medium | Decide whether to add CatBoost as a new dependency for Roadmap R3 |
+| Done | High | Replace old pending roadmap with the staged A0-A4 development plan |
+| Cancelled | Medium | Old Roadmap R3 standalone model-upgrade task; superseded by Stage A4 structural blending |
+| Cancelled | Medium | Old CatBoost decision task; dependency is now approved and belongs to Stage A4 |
+| Done | High | Stage A0: sync CLI/config/README/model-payload contracts before new feature implementation |
+| Pending | High | Stage A1: implement spatial kinematics and trajectory geometry feature block |
+| Pending | High | Stage A2a: add causal GR DWT features after dependency/runtime spike |
+| Pending | High | Stage A2b: implement strict OOF spatial KNN features with leakage tests |
+| Pending | High | Stage A3a: implement DTW typewell alignment features after rollback checkpoint |
+| Pending | High | Stage A3b: evaluate signed-log residual and derivative target engineering separately |
+| Pending | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
+| Pending | Medium | After each code push intended for Kaggle, provide exact competition notebook edit instructions |
 
 ## Open questions
 
-- What missing-value patterns matter for first ML features?
-- How should typewell data be aligned safely?
-- Should CatBoost be added to `requirements.txt` for the next model upgrade stage?
+- None for the current roadmap reset. Stage-specific blockers are tracked in `docs/ROADMAP.md` and `docs/KNOWN_ISSUES.md`.

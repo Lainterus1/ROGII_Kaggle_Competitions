@@ -268,7 +268,55 @@ R2 CV RMSE `14.75 ± 0.77` is 0.66 worse than R1 (`14.09 ± 0.88`). The anchor-o
 - Submit R1 to Kaggle.
 - Revisit typewell in a future roadmap stage with feature selection or alternative alignment.
 
+## ADR-006: Replace old roadmap with staged geoscience feature plan
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+R1 optimized is the current best clean baseline: LightGBM with 18 features, residual target `TVT - last_tvt_input`, GroupKFold by well, CV RMSE around `14.19` and public LB RMSE `12.247`.
+
+The previous pending roadmap still contained a generic model-upgrade stage and a separate CatBoost dependency decision. The user provided a new technical direction focused on physically and geologically motivated features: trajectory kinematics, causal GR DWT, strict OOF spatial KNN, DTW typewell alignment, target engineering and structural blending.
+
+### Decision
+
+- Supersede the old pending roadmap with stages A0-A4 in `docs/ROADMAP.md`.
+- Keep R1 optimized as the active comparison point for new experiments.
+- Keep Stage 4 as the frozen historical reference baseline in `docs/BASELINE_PLAN.md`.
+- Approve staged dependencies for this roadmap: `PyWavelets`, `scipy`, `catboost` and optionally `torch` for a later 1D CNN branch.
+- For spatial KNN, use a strict default test-time contract: build the test reference tree from train pre-PS rows only, excluding test pre-PS rows.
+- Keep Kaggle submissions manual only. The code may generate and validate `submission.csv`, but no automatic Kaggle submission path will be implemented.
+- After any code push intended for Kaggle execution, provide the user with exact instructions for what to change in the competition notebook.
+
+### Alternatives considered
+
+- Continue with the old standalone R3 ensemble roadmap. Rejected because it conflicts with the new feature-first development sequence.
+- Include test pre-PS rows in the spatial KNN reference tree. Rejected as the default because the stricter train-only reference makes validation/test behavior easier to reason about.
+- Add automatic Kaggle submission support. Rejected by user policy; submissions remain manual.
+- Implement all feature families at once. Rejected because A2/A3 have high leakage and rollback risk.
+
+### Consequences
+
+#### Positive
+
+- Future work is ordered by risk: inspect, implement, verify, review and only then promote.
+- Spatial features get an explicit OOF leakage contract before implementation.
+- Kaggle workflow stays safe and user-controlled.
+- Dependency additions are approved but still tied to stage-specific verification.
+
+#### Negative
+
+- More stages and gates add overhead before leaderboard submissions.
+- The stricter spatial KNN test-time contract may leave signal unused if test pre-PS rows would have been safe and useful.
+- Optional neural modeling remains deferred until tabular and stacking work is exhausted.
+
+#### Follow-up
+
+- Complete Stage A0 contracts before implementing A1 features.
+- Update Kaggle notebook instructions after each push intended for Kaggle runs.
+- Record every meaningful CV/LB result in `docs/EXPERIMENT_LOG.md`.
+
 ## Open questions
 
-- What is the official Kaggle metric?
-- What are the exact train/test/sample submission schemas?
+- None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.
