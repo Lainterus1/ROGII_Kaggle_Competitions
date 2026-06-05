@@ -28,9 +28,18 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 - `scripts/kaggle_runner.py`
 - `notebooks/00_kaggle_inference.ipynb`
 - `notebooks/01_kaggle_train.ipynb`
+- `notebooks/02_kaggle_update_repo.ipynb`
 - `AGENTS.md`
 
-## Procedure (split train/inference workflow, ADR-007)
+## Procedure (3-notebook git-clone workflow, ADR-007 + ADR-008)
+
+Three notebooks, two with internet ON (clone fresh code), one OFF (submission):
+
+| Notebook | Internet | Purpose |
+|---|---|---|
+| `02_kaggle_update_repo` | ON | `!git clone` → user creates `rogii-repo` Dataset |
+| `01_kaggle_train` | ON | `!git clone` → train → user creates `rogii-models` Dataset |
+| `00_kaggle_inference` | OFF | loads from `rogii-repo` + `rogii-models` → predict → submission |
 
 1. Keep Kaggle notebooks thin: clone repo, install requirements, configure paths, run scripts.
 2. Put reusable logic in `src/rogii/` or `scripts/`, not notebook cells.
@@ -38,14 +47,15 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 4. Write outputs to `/kaggle/working`.
 5. Do not require GitHub auth, tokens or Kaggle Secrets for cloning the public repo.
 6. Ensure notebook commands match pushed repository files.
-7. **Training notebook** (`01_kaggle_train.ipynb`): offline, uses `rogii-repo` Dataset, runs `scripts/run_train.py`, saves model to `/kaggle/working/baseline_lgbm.pkl`. After run: user creates/updates `rogii-models` Kaggle Dataset from the model output.
-8. **Inference notebook** (`00_kaggle_inference.ipynb`): offline, uses `rogii-repo` + `rogii-models` Datasets, runs `scripts/run_predict.py` only (no training). Model payload auto-detects feature flags — no CLI flags needed.
-9. After a push/update intended for Kaggle, tell the user:
-   - Update `rogii-repo` Kaggle Dataset from GitHub.
-   - If model/features changed: re-run `01_kaggle_train.ipynb` and update `rogii-models` Dataset.
-   - Run `00_kaggle_inference.ipynb` for submission.
-10. Generate and validate `submission.csv`; do not submit it automatically.
-11. Document any Kaggle-specific runtime limitation.
+7. **Repo update notebook** (`02_kaggle_update_repo.ipynb`): internet ON, `!git clone`, user creates `rogii-repo` Dataset (private). Run after every git push.
+8. **Training notebook** (`01_kaggle_train.ipynb`): internet ON, `!git clone`, runs `scripts/run_train.py`, saves model to `/kaggle/working/baseline_lgbm.pkl`. After run: user creates/updates `rogii-models` Kaggle Dataset from the model output.
+9. **Inference notebook** (`00_kaggle_inference.ipynb`): internet OFF, uses `rogii-repo` + `rogii-models` Datasets, runs `scripts/run_predict.py` only (no training). Model payload auto-detects feature flags — no CLI flags needed.
+10. After a push/update intended for Kaggle, tell the user:
+    - Run `02_kaggle_update_repo.ipynb` → Create Dataset `rogii-repo`.
+    - If model/features changed: run `01_kaggle_train.ipynb` → Create Dataset `rogii-models`.
+    - Run `00_kaggle_inference.ipynb` → download `submission.csv` → manual submit.
+11. Generate and validate `submission.csv`; do not submit it automatically.
+12. Document any Kaggle-specific runtime limitation.
 
 ## Documentation updates
 
@@ -64,14 +74,14 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 
 ## Completion checklist
 
-- [ ] Notebooks remain thin.
+- [ ] Notebooks remain thin (3 notebooks total).
 - [ ] Kaggle paths use `/kaggle/input` and `/kaggle/working`.
-- [ ] Training notebook (`01_kaggle_train.ipynb`) saves model to `/kaggle/working/baseline_lgbm.pkl`.
-- [ ] Inference notebook (`00_kaggle_inference.ipynb`) loads model from `rogii-models` Dataset, no training.
-- [ ] Commands use the offline `rogii-repo` Dataset workflow documented by the notebooks.
-- [ ] No secrets are required.
+- [ ] `02_kaggle_update_repo.ipynb` clones from GitHub, user creates `rogii-repo` Dataset.
+- [ ] `01_kaggle_train.ipynb` clones from GitHub, trains, user creates `rogii-models` Dataset.
+- [ ] `00_kaggle_inference.ipynb` is offline, loads from `rogii-repo` + `rogii-models`, no training.
+- [ ] No secrets are required for cloning the public repo.
 - [ ] Runners invoke repository scripts.
-- [ ] After a Kaggle-intended push: instructions cover whether `rogii-models` Dataset needs refresh or only inference re-run.
+- [ ] After a Kaggle-intended push: instructions cover full 3-step workflow.
 - [ ] `submission.csv` was validated before manual submission.
 
 ## Forbidden actions
