@@ -29,7 +29,7 @@ Current best clean baseline:
 |---|---|
 | Stage | R1 optimized (+A1 implemented, pending CV) |
 | Model | LightGBM |
-| Features | 24 features (with A1): 6 base + 9 geometry + 6 trajectory + 3 GR |
+| Features | 23 features (with A1): 6 base + 9 geometry + 5 trajectory + 3 GR |
 | Target | `residual = TVT - last_tvt_input` |
 | Validation | 5-fold `GroupKFold` by well |
 | Local/Kaggle CV | RMSE `~14.19` |
@@ -112,17 +112,16 @@ Status: Implemented. Pending CV run and promotion gate.
 
 Goal: improve the tree model's representation of 3D trajectory curves without changing the model family.
 
-Feature scope (6 features, `z_ps_residual` excluded — already covered by `dz_since_ps` in `GEOMETRY_FEATURES`):
+Feature scope (5 features; `z_ps_residual` excluded — covered by `dz_since_ps`; `dogleg_severity_10m` removed after ablation — importance 0.00):
 
 - `z_local_delta`: current `Z` minus the mean pre-PS `Z` for the same well.
 - `dip_angle_proxy_10`: `(Z_i - Z_{i-10}) / (MD_i - MD_{i-10})`.
-- `dogleg_severity_10m`: local 3D direction change over approximately 10m MD.
 - `tortuosity_window_50`: arc length over approximately 50m MD divided by straight-line 3D distance.
 - `sin_azimuth` and `cos_azimuth`: directional drilling azimuth encoded from `atan2(dY, dX)`.
 
 Implementation notes:
 
-- `TRAJECTORY_FEATURES` constant (6 features) and `build_trajectory_features()` in `features.py`.
+- `TRAJECTORY_FEATURES` constant (5 features) and `build_trajectory_features()` in `features.py`.
 - `include_trajectory` is a superset of `include_geometry`: setting `--include-trajectory` automatically includes geometry features. `include_geometry` remains as a legacy flag for backward compatibility (R1 models load without changes).
 - Feature flag stored in model payload; predict auto-detects from payload — no CLI flags needed for inference.
 - Resulting R1+A1 feature count: 6 base + 9 geometry + 6 trajectory + 3 GR = **24 features**.

@@ -40,7 +40,6 @@ GEOMETRY_FEATURES = [
 TRAJECTORY_FEATURES = [
     "z_local_delta",
     "dip_angle_proxy_10",
-    "dogleg_severity_10m",
     "tortuosity_window_50",
     "sin_azimuth",
     "cos_azimuth",
@@ -162,23 +161,6 @@ def build_trajectory_features(horizontal: pd.DataFrame) -> pd.DataFrame:
     dy = np.diff(y, prepend=y[0])
     dz = np.diff(z, prepend=z[0])
     ds = np.sqrt(dx**2 + dy**2 + dz**2)
-    safe_mask = ds > 1e-9
-    ux = np.divide(dx, ds, out=np.zeros_like(dx), where=safe_mask)
-    uy = np.divide(dy, ds, out=np.zeros_like(dy), where=safe_mask)
-    uz = np.divide(dz, ds, out=np.zeros_like(dz), where=safe_mask)
-
-    dls = np.zeros(n, dtype=float)
-    window = 10
-    for i in range(n):
-        j = max(0, i - window)
-        if j == i:
-            dls[i] = 0.0
-        else:
-            dot = ux[i] * ux[j] + uy[i] * uy[j] + uz[i] * uz[j]
-            dot = np.clip(dot, -1.0, 1.0)
-            dls[i] = float(np.arccos(dot))
-    feats["dogleg_severity_10m"] = dls
-
     tort = np.ones(n, dtype=float)
     window_t = 50
     for i in range(n):

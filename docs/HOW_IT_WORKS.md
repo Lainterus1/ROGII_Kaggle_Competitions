@@ -4,7 +4,7 @@
 
 Explain every feature in the R1+A1 baseline: what it measures physically, why it was kept, and what the feature importance analysis revealed.
 
-## Current feature set (24 features: 6 base + 9 geometry + 6 trajectory + 3 GR; R1 CV RMSE 14.19 ± 0.89)
+## Current feature set (23 features: 6 base + 9 geometry + 5 trajectory + 3 GR; R1 CV RMSE 14.19 ± 0.89)
 
 ---
 
@@ -150,9 +150,9 @@ Explain every feature in the R1+A1 baseline: what it measures physically, why it
 
 ---
 
-## A1 Trajectory kinematics features (6)
+## A1 Trajectory kinematics features (5)
 
-Добавлены в Stage A1 для улучшения представления 3D-кривизны скважины. `include_trajectory` автоматически включает `include_geometry` (контракт: один флаг = все spatial фичи).
+Добавлены в Stage A1 для улучшения представления 3D-кривизны скважины. `include_trajectory` автоматически включает `include_geometry` (контракт: один флаг = все spatial фичи). `dogleg_severity_10m` удалён после ablation (importance 0.00, мультиколлинеарность с `dzdmd`).
 
 ### `z_local_delta` — отклонение Z от среднего pre-PS
 
@@ -167,14 +167,6 @@ Explain every feature in the R1+A1 baseline: what it measures physically, why it
 **Что это:** `(Z_i - Z_{i-10}) / (MD_i - MD_{i-10})` — отношение изменения глубины к изменению measured depth. Положительное значение = скважина идёт вверх (к меньшей глубине), отрицательное = вниз.
 
 **Логика включения:** Угол наклона определяет, пересекает ли скважина формации или идёт вдоль них.
-
----
-
-### `dogleg_severity_10m` — интенсивность искривления
-
-**Что это:** Угол между направлениями ствола в точках i и i-10 (в радианах). Вычисляется через arccos скалярного произведения единичных векторов направления.
-
-**Логика включения:** Резкие изгибы ствола (dogleg > 5°/30m) могут указывать на геологические препятствия или смену целевого пласта.
 
 ---
 
