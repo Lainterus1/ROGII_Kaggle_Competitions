@@ -48,7 +48,7 @@ The Stage 4 baseline remains frozen as the historical reference baseline in `doc
 - Add new dependencies only as approved staged dependencies: `PyWavelets`, `scipy`, `catboost` and optionally `torch`.
 - Promote a stage only after tests pass, leakage review passes, submission validation passes, and CV improves or the stage produces useful diagnostics.
 - Kaggle submission is always manual. The project may generate and validate `submission.csv`, but the user performs the actual submit.
-- After a code push intended for Kaggle, run notebooks in order: `02_kaggle_update_repo.ipynb` → `01_kaggle_train.ipynb` (if model changed) → `00_kaggle_inference.ipynb` (for submission). See Kaggle workflow in `.agents/skills/kaggle-runner/SKILL.md`.
+- After a code push intended for Kaggle: `02_kaggle_update_repo` (Pull from GitHub → Run → Create Dataset `rogii-repo`) → `01_kaggle_train` if model changed (Pull from GitHub → Run → Create Dataset `rogii-models`) → `00_kaggle_inference` (Run, internet OFF → Submit). Notebooks `01` and `02` are GitHub-linked (setup once via File → Link to GitHub). See `.agents/skills/kaggle-runner/SKILL.md`.
 
 ## Standard Gate After Each Stage
 
@@ -61,7 +61,7 @@ The Stage 4 baseline remains frozen as the historical reference baseline in `doc
 7. Update `docs/EXPERIMENT_LOG.md` after meaningful runs.
 8. Update `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/VALIDATION_STRATEGY.md` or `docs/KNOWN_ISSUES.md` when stage status, validation contracts or risks change.
 9. Do not commit `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`, OOF artifacts or generated submissions.
-10. After a code push: run `02_kaggle_update_repo.ipynb` (Create Dataset `rogii-repo`) → if needed, `01_kaggle_train.ipynb` (Create Dataset `rogii-models`) → `00_kaggle_inference.ipynb` for submission.
+10. After a code push: open `02` → Pull from GitHub → Run → Create Dataset `rogii-repo` → if model changed, open `01` → Pull from GitHub → Run → Create Dataset `rogii-models` → open `00` → Run (offline) → Submit.
 
 ## Stage A0: Pipeline Contracts and Roadmap Reset
 

@@ -358,6 +358,44 @@ The previous single notebook `00_kaggle_thin_runner.ipynb` ran both training and
 - Update `configs/paths.kaggle.yaml` with model input path.
 - Update Kaggle notebook instructions in `docs/ROADMAP.md` after each code push.
 
+## ADR-008: GitHub-linked Kaggle Notebooks with git clone for training
+
+Date: 2026-06-05
+Status: Accepted
+
+### Context
+
+ADR-007 split training and inference into separate notebooks, but code updates still required manual Import File or copying JSON between GitHub and Kaggle. This was friction for every feature change.
+
+### Decision
+
+- `01_kaggle_train.ipynb` and `02_kaggle_update_repo.ipynb` are linked to GitHub via Kaggle's built-in File → Link to GitHub feature (one-time setup per notebook).
+- Before each run: File → Pull from GitHub fetches the latest notebook code and commands.
+- Both use `!git clone` (internet ON) to get the full repo, eliminating the need for `rogii-repo` Dataset in training.
+- `00_kaggle_inference.ipynb` remains NOT linked to GitHub and offline — code comes from `rogii-repo` Dataset (produced by `02`).
+- `rogii-repo` Dataset is created by `02_kaggle_update_repo.ipynb` (Save Version → Create Dataset, one click in Kaggle UI after the notebook finishes).
+
+### After git push workflow
+
+1. `02`: Pull from GitHub → Run → Create Dataset `rogii-repo`
+2. `01` (if model changed): Pull from GitHub → Run → Create Dataset `rogii-models`
+3. `00`: Run (offline) → Submit
+
+### Consequences
+
+#### Positive
+
+- Zero manual file downloads/uploads between GitHub and Kaggle.
+- Notebook code stays in sync with repository via one button (Pull from GitHub).
+- Inference stays offline for competition compliance.
+- Training uses live git clone — always runs the latest pushed code without intermediate Dataset.
+
+#### Negative
+
+- Two notebooks require internet ON (training + repo update).
+- Pull from GitHub is manual (not triggered by push).
+- First-time setup requires linking two notebooks to GitHub.
+
 ## Open questions
 
 - None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.

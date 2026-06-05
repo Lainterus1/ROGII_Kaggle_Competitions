@@ -31,31 +31,45 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 - `notebooks/02_kaggle_update_repo.ipynb`
 - `AGENTS.md`
 
-## Procedure (3-notebook git-clone workflow, ADR-007 + ADR-008)
+## Procedure (3-notebook GitHub-linked workflow, ADR-008)
 
-Three notebooks, two with internet ON (clone fresh code), one OFF (submission):
+Three notebooks. `01` and `02` are linked to GitHub (File → Link to GitHub → `Lainterus1/ROGII_Kaggle_Competitions`). `00` is offline, uses `rogii-repo` Dataset for code.
 
-| Notebook | Internet | Purpose |
+### One-time setup (in Kaggle)
+
+Create three notebooks and link two to GitHub:
+
+| Notebook | File → Link to GitHub | Internet |
 |---|---|---|
-| `02_kaggle_update_repo` | ON | `!git clone` → user creates `rogii-repo` Dataset |
-| `01_kaggle_train` | ON | `!git clone` → train → user creates `rogii-models` Dataset |
-| `00_kaggle_inference` | OFF | loads from `rogii-repo` + `rogii-models` → predict → submission |
+| `02_kaggle_update_repo` | `notebooks/02_kaggle_update_repo.ipynb` | ON |
+| `01_kaggle_train` | `notebooks/01_kaggle_train.ipynb` | ON |
+| `00_kaggle_inference` | Do NOT link | OFF |
 
-1. Keep Kaggle notebooks thin: clone repo, install requirements, configure paths, run scripts.
+### After every git push
+
+```
+1. Open 02_kaggle_update_repo → File → Pull from GitHub → Run
+   → Save Version → Create Dataset "rogii-repo" (private)
+
+2. If model/features changed:
+   Open 01_kaggle_train → File → Pull from GitHub → Run
+   → Save Version → Create Dataset "rogii-models" (private)
+
+3. Open 00_kaggle_inference → Run (internet OFF, no pull)
+   → Download submission.csv → Manual submit
+```
+
+1. Keep Kaggle notebooks thin: clone repo, run scripts.
 2. Put reusable logic in `src/rogii/` or `scripts/`, not notebook cells.
-3. Use `configs/paths.kaggle.yaml` for Kaggle paths.
-4. Write outputs to `/kaggle/working`.
-5. Do not require GitHub auth, tokens or Kaggle Secrets for cloning the public repo.
-6. Ensure notebook commands match pushed repository files.
-7. **Repo update notebook** (`02_kaggle_update_repo.ipynb`): internet ON, `!git clone`, user creates `rogii-repo` Dataset (private). Run after every git push.
-8. **Training notebook** (`01_kaggle_train.ipynb`): internet ON, `!git clone`, runs `scripts/run_train.py`, saves model to `/kaggle/working/baseline_lgbm.pkl`. After run: user creates/updates `rogii-models` Kaggle Dataset from the model output.
-9. **Inference notebook** (`00_kaggle_inference.ipynb`): internet OFF, uses `rogii-repo` + `rogii-models` Datasets, runs `scripts/run_predict.py` only (no training). Model payload auto-detects feature flags — no CLI flags needed.
-10. After a push/update intended for Kaggle, tell the user:
-    - Run `02_kaggle_update_repo.ipynb` → Create Dataset `rogii-repo`.
-    - If model/features changed: run `01_kaggle_train.ipynb` → Create Dataset `rogii-models`.
-    - Run `00_kaggle_inference.ipynb` → download `submission.csv` → manual submit.
-11. Generate and validate `submission.csv`; do not submit it automatically.
-12. Document any Kaggle-specific runtime limitation.
+3. Write outputs to `/kaggle/working`.
+4. Do not require GitHub auth, tokens or Kaggle Secrets for cloning the public repo.
+5. Ensure notebook commands match pushed repository files.
+6. **Repo update notebook** (`02_kaggle_update_repo.ipynb`): linked to GitHub, internet ON, `!git clone`, user creates `rogii-repo` Dataset (private). Before each run: File → Pull from GitHub.
+7. **Training notebook** (`01_kaggle_train.ipynb`): linked to GitHub, internet ON, `!git clone`, runs `scripts/run_train.py`, saves model to `/kaggle/working/baseline_lgbm.pkl`. After run: user creates `rogii-models` Dataset. Before each run: File → Pull from GitHub.
+8. **Inference notebook** (`00_kaggle_inference.ipynb`): NOT linked to GitHub, internet OFF, uses `rogii-repo` + `rogii-models` Datasets, runs `scripts/run_predict.py` only. Model payload auto-detects feature flags.
+9. After a push/update intended for Kaggle, tell the user the 3-step workflow above.
+10. Generate and validate `submission.csv`; do not submit it automatically.
+11. Document any Kaggle-specific runtime limitation.
 
 ## Documentation updates
 
