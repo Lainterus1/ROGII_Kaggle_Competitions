@@ -27,9 +27,9 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|
-| Stage | R1 optimized (+A1 implemented, pending CV) |
+| Stage | R1 optimized |
 | Model | LightGBM |
-| Features | 23 features (with A1): 6 base + 9 geometry + 5 trajectory + 3 GR |
+| Features | 18 features: 6 base + 9 geometry + 3 GR |
 | Target | `residual = TVT - last_tvt_input` |
 | Validation | 5-fold `GroupKFold` by well |
 | Local/Kaggle CV | RMSE `~14.19` |
@@ -108,46 +108,11 @@ Promotion gate:
 
 ## Stage A1: Spatial Kinematics and Trajectory Geometry
 
-Status: Implemented. Pending CV run and promotion gate.
+Status: **Rejected.** CV 14.24 (flat vs R1 14.19), Kaggle LB 12.487 (worse vs R1 12.247). All 5 trajectory features are near-perfect linear transforms of existing geometry features (r >= 0.99). No new signal — only importance redistribution across duplicates. Code remains in `features.py` for future experiments.
 
 Goal: improve the tree model's representation of 3D trajectory curves without changing the model family.
 
-Feature scope (5 features; `z_ps_residual` excluded — covered by `dz_since_ps`; `dogleg_severity_10m` removed after ablation — importance 0.00):
-
-- `z_local_delta`: current `Z` minus the mean pre-PS `Z` for the same well.
-- `dip_angle_proxy_10`: `(Z_i - Z_{i-10}) / (MD_i - MD_{i-10})`.
-- `tortuosity_window_50`: arc length over approximately 50m MD divided by straight-line 3D distance.
-- `sin_azimuth` and `cos_azimuth`: directional drilling azimuth encoded from `atan2(dY, dX)`.
-
-Implementation notes:
-
-- `TRAJECTORY_FEATURES` constant (5 features) and `build_trajectory_features()` in `features.py`.
-- `include_trajectory` is a superset of `include_geometry`: setting `--include-trajectory` automatically includes geometry features. `include_geometry` remains as a legacy flag for backward compatibility (R1 models load without changes).
-- Feature flag stored in model payload; predict auto-detects from payload — no CLI flags needed for inference.
-- Resulting R1+A1 feature count: 6 base + 9 geometry + 6 trajectory + 3 GR = **24 features**.
-- Zero MD deltas and early windows handled with `np.divide(out=zeros)` and finite fallbacks.
-
-Primary files:
-
-- `src/rogii/features.py` — `TRAJECTORY_FEATURES`, `build_trajectory_features()`
-- `src/rogii/model_io.py` — `include_trajectory` in `FEATURE_FLAG_KEYS`
-- `src/rogii/train.py` — `include_trajectory` parameter
-- `src/rogii/predict.py` — `include_trajectory` parameter
-- `scripts/run_train.py` — `--include-trajectory` CLI flag
-- `scripts/run_predict.py` — `--include-trajectory` CLI flag
-- `tests/test_feature_engineering.py` — 12 trajectory tests
-- `tests/test_no_target_leakage.py` — leakage test for trajectory features
-
-Verification:
-
-- `python -m pytest tests` — 72 passed, 0 warnings.
-- Candidate train command: `python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-trajectory --include-gr --residual-target --output-model models/a1_lgbm.pkl`
-- Candidate predict command: `python scripts/run_predict.py --data-dir data --model models/a1_lgbm.pkl --output outputs/a1_submission.csv`
-- Submission validation: `python scripts/validate_submission.py --data-dir data --submission outputs/a1_submission.csv`
-
-Promotion gate:
-
-- Promote only if leakage tests pass and CV improves over R1 optimized (~14.19 RMSE) or feature importance gives strong evidence for keeping the block.
+Code remaining in repo (`TRAJECTORY_FEATURES`, `build_trajectory_features()`, `include_trajectory` flag). Rejection reason: all 5 features are linear duplicates of `GEOMETRY_FEATURES` (r >= 0.99 with `dz_since_ps`, `dzdmd`, `dxdmd`, `dydmd`). `dogleg_severity_10m` was ablated mid-experiment (importance 0.00).
 
 ## Stage A2: GR DWT and Strict OOF Spatial KNN
 

@@ -1,10 +1,10 @@
-# HOW IT WORKS — R1 + A1 Feature Set
+# HOW IT WORKS — R1 Feature Set
 
 ## Purpose
 
-Explain every feature in the R1+A1 baseline: what it measures physically, why it was kept, and what the feature importance analysis revealed.
+Explain every feature in the R1 baseline: what it measures physically, why it was kept, and what the feature importance analysis revealed.
 
-## Current feature set (23 features: 6 base + 9 geometry + 5 trajectory + 3 GR; R1 CV RMSE 14.19 ± 0.89)
+## Current feature set (18 features, CV RMSE 14.19 ± 0.89)
 
 ---
 
@@ -150,9 +150,11 @@ Explain every feature in the R1+A1 baseline: what it measures physically, why it
 
 ---
 
-## A1 Trajectory kinematics features (5)
+## A1 Trajectory kinematics features (5 — REJECTED)
 
-Добавлены в Stage A1 для улучшения представления 3D-кривизны скважины. `include_trajectory` автоматически включает `include_geometry` (контракт: один флаг = все spatial фичи). `dogleg_severity_10m` удалён после ablation (importance 0.00, мультиколлинеарность с `dzdmd`).
+**Status: Rejected.** CV 14.24 (flat), LB 12.487 (worse than R1 12.247). All 5 features are near-perfect linear transforms of existing `GEOMETRY_FEATURES` (r >= 0.99). No new signal, only importance redistribution across duplicates. Code kept for future experiments.
+
+`dogleg_severity_10m` удалён после ablation (importance 0.00, мультиколлинеарность с `dzdmd`).
 
 ### `z_local_delta` — отклонение Z от среднего pre-PS
 
