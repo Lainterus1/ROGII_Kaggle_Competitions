@@ -10,11 +10,13 @@ from rogii.features import (
     TRAJECTORY_FEATURES,
     TYPEWELL_FEATURES,
     WITH_TVT_INPUT_FEATURES,
+    Z_DRIFT_FEATURES,
     build_features,
     build_geometry_features,
     build_gr_features,
     build_trajectory_features,
     build_typewell_features,
+    build_z_drift_features,
     get_feature_set_name,
     last_known_tvt_input_value,
     post_ps_mask,
@@ -528,3 +530,117 @@ def test_build_features_r1_plus_dwt() -> None:
                              dwt_window=32, dwt_min_window=8)
     expected_cols = SAFE_NUMERIC_FEATURES + GEOMETRY_FEATURES + GR_FEATURES + GR_DWT_FEATURES
     assert list(features.columns) == expected_cols
+
+
+# ---------------------------------------------------------------------------
+# Z-Drift physics features
+# ---------------------------------------------------------------------------
+
+
+def test_z_drift_features_constants() -> None:
+    assert isinstance(Z_DRIFT_FEATURES, list)
+    assert len(Z_DRIFT_FEATURES) == 3
+    assert Z_DRIFT_FEATURES[0] == "z_drift_offset_at_anchor"
+    assert Z_DRIFT_FEATURES[1] == "z_drift_implied_tvt"
+    assert Z_DRIFT_FEATURES[2] == "z_drift_implied_tvt_resid"
+
+
+def test_z_drift_features_columns() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    assert list(feats.columns) == Z_DRIFT_FEATURES
+    assert len(feats) == 20
+
+
+def test_z_drift_features_no_nan() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    assert not feats.isna().any().any()
+
+
+def test_z_drift_offset_computation() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    last_tvt = last_known_tvt_input_value(frame)
+    ps_idx = 10
+    z_at_ps = frame.loc[ps_idx, "Z"]
+    expected_offset = last_tvt - z_at_ps
+    assert feats.loc[0, "z_drift_offset_at_anchor"] == pytest.approx(expected_offset)
+    assert feats["z_drift_offset_at_anchor"].nunique() == 1
+
+
+def test_z_drift_implied_tvt_formula() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    last_tvt = last_known_tvt_input_value(frame)
+    ps_idx = 10
+    z_at_ps = frame.loc[ps_idx, "Z"]
+    offset = last_tvt - z_at_ps
+    for i in range(20):
+        expected = frame.loc[i, "Z"] + offset
+        assert feats.loc[i, "z_drift_implied_tvt"] == pytest.approx(expected)
+
+
+def test_z_drift_resid_formula() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    last_tvt = last_known_tvt_input_value(frame)
+    implied = feats["z_drift_implied_tvt"].values
+    expected_resid = np.clip(implied - last_tvt, -100.0, 100.0)
+    assert np.allclose(feats["z_drift_implied_tvt_resid"].values, expected_resid)
+
+
+def test_z_drift_resid_clipping() -> None:
+    frame = _make_well(20)
+    feats = build_z_drift_features(frame)
+    resid = feats["z_drift_implied_tvt_resid"].values
+    assert np.all(np.abs(resid) <= 100.0)
+
+
+def test_z_drift_all_nan_tvt_input() -> None:
+    frame = _make_well(10)
+    frame["TVT_input"] = np.nan
+    feats = build_z_drift_features(frame)
+    assert (feats["z_drift_offset_at_anchor"] == 0.0).all()
+    assert (feats["z_drift_implied_tvt"] == 0.0).all()
+    assert (feats["z_drift_implied_tvt_resid"] == 0.0).all()
+
+
+def test_z_drift_zero_offset() -> None:
+    frame = _make_well(20)
+    ps_idx = 10
+    z_at_ps = frame.loc[ps_idx, "Z"]
+    frame["TVT_input"] = z_at_ps
+    frame.loc[frame.index >= ps_idx, "TVT_input"] = np.nan
+    feats = build_z_drift_features(frame)
+    assert feats["z_drift_offset_at_anchor"].iloc[0] == pytest.approx(0.0, abs=1e-6)
+    assert np.allclose(feats["z_drift_implied_tvt"].values, frame["Z"].astype(float).values)
+
+
+def test_build_features_with_z_drift() -> None:
+    frame = _make_well(20)
+    features = build_features(frame, include_z_drift=True)
+    expected_cols = SAFE_NUMERIC_FEATURES + Z_DRIFT_FEATURES
+    assert list(features.columns) == expected_cols
+    assert "z_drift_offset_at_anchor" in features.columns
+    assert "z_drift_implied_tvt" in features.columns
+    assert "z_drift_implied_tvt_resid" in features.columns
+
+
+def test_build_features_r1_plus_z_drift() -> None:
+    frame = _make_well(20)
+    features = build_features(frame, include_geometry=True, include_gr=True,
+                             include_z_drift=True)
+    expected_cols = SAFE_NUMERIC_FEATURES + GEOMETRY_FEATURES + GR_FEATURES + Z_DRIFT_FEATURES
+    assert list(features.columns) == expected_cols
+    assert len(features.columns) == 6 + 9 + 3 + 3
+
+
+def test_z_drift_single_row() -> None:
+    frame = _make_well(1)
+    frame.loc[0, "TVT_input"] = np.nan
+    feats = build_z_drift_features(frame)
+    assert len(feats) == 1
+    assert feats.loc[0, "z_drift_offset_at_anchor"] == 0.0
+    assert feats.loc[0, "z_drift_implied_tvt"] == 0.0
+    assert feats.loc[0, "z_drift_implied_tvt_resid"] == 0.0

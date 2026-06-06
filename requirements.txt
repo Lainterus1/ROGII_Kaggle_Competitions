@@ -7,4 +7,5 @@ pyyaml
 mlflow
 scipy
 pywavelets
+numba
 pytest

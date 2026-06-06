@@ -150,6 +150,32 @@ Explain every feature in the R1 baseline: what it measures physically, why it wa
 
 ---
 
+## PrP2 Z-Drift Physics features (3 — NOT PROMOTED)
+
+**Status: Not promoted.** CV 14.20 (flat vs R1 14.19). 2/3 features are linear duplicates of existing geometry features. Code kept behind `include_z_drift` flag.
+
+### `z_drift_offset_at_anchor` — TVT-to-Z mapping constant
+
+**Что это:** `last_tvt_input − Z_at_PS` — константа скважины, показывающая сдвиг между TVT и Z в точке Prediction Start.
+
+**Логика включения:** Разные скважины находятся в разных частях бассейна, где глубина залегания формаций разная. Offset кодирует региональный Z→TVT mapping. Единственный новый signal из трёх фич.
+
+**Почему не помогло:** Well-level константа — LightGBM не может эффективно использовать её для сплитов.
+
+### `z_drift_implied_tvt` — TVT-оценка из Z
+
+**Что это:** `Z + offset` — что TVT «должен быть» по физике плоской формации.
+
+**Почему не помогло:** `Z + const` полностью дублирует `Z` (r=1.0). В residual mode `Z` уже в модели, добавление константы не меняет ранжирование → no new splits.
+
+### `z_drift_implied_tvt_resid` — отклонение implied TVT от якоря
+
+**Что это:** `implied_tvt − last_tvt_input`, clipped в ±100 ft.
+
+**Почему не помогло:** Математически это `Z − Z_at_PS = dz_since_ps` (r=1.0 с существующей geometry-фичей). Полный дубликат.
+
+---
+
 ## A1 Trajectory kinematics features (5 — REJECTED)
 
 **Status: Rejected.** CV 14.24 (flat), LB 12.487 (worse than R1 12.247). All 5 features are near-perfect linear transforms of existing `GEOMETRY_FEATURES` (r >= 0.99). No new signal, only importance redistribution across duplicates. Code kept for future experiments.

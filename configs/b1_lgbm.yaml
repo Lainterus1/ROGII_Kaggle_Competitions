@@ -1,5 +1,5 @@
 run:
-  name: a2a_lgbm_dwt
+  name: b1_lgbm_beam
   type: model_baseline
   seed: 42
   environment: local
@@ -11,11 +11,18 @@ model:
   type: lightgbm
   params:
     objective: regression
-    learning_rate: 0.05
-    n_estimators: 1000
+    learning_rate: 0.03
+    n_estimators: 5000
+    num_leaves: 127
+    min_child_samples: 15
+    subsample: 0.75
+    subsample_freq: 1
+    colsample_bytree: 0.75
+    reg_lambda: 3.0
+    reg_alpha: 0.05
 
 features:
-  set_name: a2a_dwt
+  set_name: b1_beam
   columns:
     - MD
     - X
@@ -35,10 +42,13 @@ features:
     - gr_roll_mean_101
     - gr_roll_std_101
     - gr_energy
+    - gr_dwt_approx
+    - gr_dwt_detail_energy
   include_tvt_input: false
   include_geometry: true
   include_gr: true
   include_gr_dwt: true
+  include_beam: true
   include_typewell: false
   include_spatial: false
   include_dtw: false
@@ -51,5 +61,5 @@ validation:
   group_column: well_id
 
 artifacts:
-  model_path: models/a2a_lgbm.pkl
+  model_path: models/b1_lgbm.pkl
   submission_path: outputs/submission.csv

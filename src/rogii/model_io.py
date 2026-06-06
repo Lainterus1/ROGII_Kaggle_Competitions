@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_trajectory", "include_typewell", "include_gr_dwt", "include_spatial", "include_dtw", "include_geology")
+FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "include_trajectory", "include_typewell", "include_gr_dwt", "include_spatial", "include_dtw", "include_geology", "include_beam", "include_formation_plane", "include_z_drift")
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class PredictionContract:
 
     model: Any
     residual_target: bool
+    baseline_method: str
     feature_flags: dict[str, bool]
     feature_columns: list[str] | None
 
@@ -28,6 +29,9 @@ def make_feature_flags(
     include_spatial: bool = False,
     include_dtw: bool = False,
     include_geology: bool = False,
+    include_beam: bool = False,
+    include_formation_plane: bool = False,
+    include_z_drift: bool = False,
 ) -> dict[str, bool]:
     """Return normalized feature flags stored in model payloads."""
     return {
@@ -40,6 +44,9 @@ def make_feature_flags(
         "include_spatial": bool(include_spatial),
         "include_dtw": bool(include_dtw),
         "include_geology": bool(include_geology),
+        "include_beam": bool(include_beam),
+        "include_formation_plane": bool(include_formation_plane),
+        "include_z_drift": bool(include_z_drift),
     }
 
 
@@ -48,7 +55,8 @@ def build_model_payload(
     model: Any,
     feature_columns: list[str],
     residual_target: bool,
-    feature_flags: dict[str, bool],
+    baseline_method: str = "flat",
+    feature_flags: dict[str, bool] | None = None,
     model_type: str = "lightgbm",
     run_name: str | None = None,
     seed: int | None = None,
@@ -60,10 +68,14 @@ def build_model_payload(
     train_wells: int | None = None,
     config_path: str | None = None,
     model_params: dict[str, Any] | None = None,
+    clip_lower: float | None = None,
+    clip_upper: float | None = None,
 ) -> dict[str, Any]:
     """Build a versioned payload that prevents train/predict feature drift."""
+    if feature_flags is None:
+        feature_flags = {}
     flags = make_feature_flags(**{key: feature_flags.get(key, False) for key in FEATURE_FLAG_KEYS})
-    return {
+    payload: dict[str, Any] = {
         "payload_version": 2,
         "model": model,
         "model_type": model_type,
@@ -71,6 +83,7 @@ def build_model_payload(
         "feature_columns": list(feature_columns),
         "feature_flags": flags,
         "residual_target": bool(residual_target),
+        "baseline_method": str(baseline_method),
         "seed": seed,
         "n_splits": n_splits,
         "cv_rmse_mean": cv_rmse_mean,
@@ -90,7 +103,15 @@ def build_model_payload(
         "include_spatial": flags["include_spatial"],
         "include_dtw": flags["include_dtw"],
         "include_geology": flags["include_geology"],
+        "include_beam": flags["include_beam"],
+        "include_formation_plane": flags["include_formation_plane"],
+        "include_z_drift": flags["include_z_drift"],
     }
+    if clip_lower is not None:
+        payload["clip_lower"] = clip_lower
+    if clip_upper is not None:
+        payload["clip_upper"] = clip_upper
+    return payload
 
 
 def resolve_prediction_contract(
@@ -98,6 +119,7 @@ def resolve_prediction_contract(
     *,
     cli_feature_flags: dict[str, bool] | None = None,
     cli_residual_target: bool = False,
+    cli_baseline_method: str = "flat",
 ) -> PredictionContract:
     """Resolve model metadata and reject unsafe train/predict flag mismatches."""
     cli_flags = make_feature_flags(**(cli_feature_flags or {}))
@@ -105,6 +127,7 @@ def resolve_prediction_contract(
         return PredictionContract(
             model=payload,
             residual_target=bool(cli_residual_target),
+            baseline_method=str(cli_baseline_method),
             feature_flags=cli_flags,
             feature_columns=None,
         )
@@ -113,15 +136,23 @@ def resolve_prediction_contract(
     has_v2_contract = "feature_flags" in payload or "feature_columns" in payload
     payload_flags = _payload_feature_flags(payload)
     residual_target = bool(payload.get("residual_target", False))
+    baseline_method = str(payload.get("baseline_method", "flat"))
 
     if has_v2_contract:
         _reject_cli_overrides(payload_flags, cli_flags)
         if cli_residual_target and not residual_target:
             raise ValueError("Model payload was trained without residual target; do not override target mode at predict time")
+        if baseline_method != "flat" and cli_baseline_method != "flat" and baseline_method != cli_baseline_method:
+            raise ValueError(
+                f"Model payload was trained with baseline_method='{baseline_method}'; "
+                f"refusing override to '{cli_baseline_method}'"
+            )
     else:
         # Legacy dict payloads did not store include_tvt_input, so allow CLI flags to fill missing metadata.
         payload_flags = {key: payload_flags[key] or cli_flags[key] for key in FEATURE_FLAG_KEYS}
         residual_target = residual_target or bool(cli_residual_target)
+        if cli_baseline_method != "flat":
+            baseline_method = cli_baseline_method
 
     feature_columns = payload.get("feature_columns")
     if feature_columns is not None:
@@ -130,6 +161,7 @@ def resolve_prediction_contract(
     return PredictionContract(
         model=model,
         residual_target=residual_target,
+        baseline_method=baseline_method,
         feature_flags=payload_flags,
         feature_columns=feature_columns,
     )
@@ -161,6 +193,9 @@ def _payload_feature_flags(payload: dict[str, Any]) -> dict[str, bool]:
         include_spatial=stored.get("include_spatial", payload.get("include_spatial", False)),
         include_dtw=stored.get("include_dtw", payload.get("include_dtw", False)),
         include_geology=stored.get("include_geology", payload.get("include_geology", False)),
+        include_beam=stored.get("include_beam", payload.get("include_beam", False)),
+        include_formation_plane=stored.get("include_formation_plane", payload.get("include_formation_plane", False)),
+        include_z_drift=stored.get("include_z_drift", payload.get("include_z_drift", False)),
     )
 
 

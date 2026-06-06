@@ -1,0 +1,19 @@
+{
+  "id": "daniilgonchar/00-rogii-inference-r1",
+  "title": "00 - ROGII Inference (R1)",
+  "code_file": "00_kaggle_inference.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "daniilgonchar/rogii-repo-v2",
+    "daniilgonchar/rogii-models-v2"
+  ],
+  "competition_sources": [
+    "rogii-wellbore-geology-prediction"
+  ],
+  "kernel_sources": [],
+  "model_sources": []
+}

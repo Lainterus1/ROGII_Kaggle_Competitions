@@ -29,7 +29,14 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--include-spatial", action="store_true", help="Include OOF spatial KNN features (pre-PS TVT_input only)")
     parser.add_argument("--include-dtw", action="store_true", help="Include DTW typewell alignment features")
     parser.add_argument("--include-geology", action="store_true", help="Include formation geology features from typewell")
+    parser.add_argument("--include-beam", action="store_true", help="Include Numba JIT beam search stratigraphic alignment features")
+    parser.add_argument("--include-formation-plane", action="store_true", help="Include KNN-imputed formation plane features")
+    parser.add_argument("--include-z-drift", action="store_true", help="Include TVT-Z drift physics features (offset, implied TVT, resid)")
     parser.add_argument("--residual-target", action="store_true", help="Train on TVT - last_tvt_input delta instead of raw TVT")
+    parser.add_argument("--baseline-method", default="flat", choices=["flat", "slope_md", "slope_z", "slope_recent", "wls"],
+                        help="Baseline construction method for residual target")
+    parser.add_argument("--eval-postproc", action="store_true",
+                        help="Evaluate Savgol smoothing + TVT clipping on OOF CV predictions")
     return parser
 
 
@@ -71,7 +78,11 @@ def main() -> None:
     include_spatial = _bool_setting(args.include_spatial, feature_config, "include_spatial")
     include_dtw = _bool_setting(args.include_dtw, feature_config, "include_dtw")
     include_geology = _bool_setting(args.include_geology, feature_config, "include_geology")
+    include_beam = _bool_setting(args.include_beam, feature_config, "include_beam")
+    include_formation_plane = _bool_setting(args.include_formation_plane, feature_config, "include_formation_plane")
+    include_z_drift = _bool_setting(args.include_z_drift, feature_config, "include_z_drift")
     residual_target = _bool_setting(args.residual_target, feature_config, "residual_target")
+    baseline_method = args.baseline_method or feature_config.get("baseline_method", "flat")
 
     model_dir = Path(output_model).parent
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -90,7 +101,12 @@ def main() -> None:
         include_spatial=include_spatial,
         include_dtw=include_dtw,
         include_geology=include_geology,
+        include_beam=include_beam,
+        include_formation_plane=include_formation_plane,
+        include_z_drift=include_z_drift,
         residual_target=residual_target,
+        baseline_method=baseline_method,
+        eval_postproc=args.eval_postproc,
     )
 
     feature_flags = make_feature_flags(
@@ -103,11 +119,14 @@ def main() -> None:
         include_spatial=include_spatial,
         include_dtw=include_dtw,
         include_geology=include_geology,
+        include_beam=include_beam,
+        include_z_drift=include_z_drift,
     )
     payload = build_model_payload(
         model=result.model,
         feature_columns=result.feature_columns,
         residual_target=result.residual_target,
+        baseline_method=result.baseline_method,
         feature_flags=feature_flags,
         model_type=str(model_config.get("type", "lightgbm")),
         run_name=run_config.get("name"),
@@ -120,6 +139,8 @@ def main() -> None:
         train_wells=result.train_wells,
         config_path=args.config,
         model_params=model_params,
+        clip_lower=result.clip_bounds[0] if result.clip_bounds else None,
+        clip_upper=result.clip_bounds[1] if result.clip_bounds else None,
     )
     with open(output_model, "wb") as f:
         pickle.dump(payload, f)

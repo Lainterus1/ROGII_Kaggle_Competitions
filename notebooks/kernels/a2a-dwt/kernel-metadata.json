@@ -1,0 +1,20 @@
+{
+  "id": "daniilgonchar/00-rogii-inference-a2a-dwt",
+  "title": "00 - ROGII Inference (a2a-dwt)",
+  "code_file": "00_kaggle_inference.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "daniilgonchar/rogii-repo-v2",
+    "daniilgonchar/rogii-models-a2a-dwt",
+    "daniilgonchar/rogii-wheels-a2a-dwt"
+  ],
+  "competition_sources": [
+    "rogii-wellbore-geology-prediction"
+  ],
+  "kernel_sources": [],
+  "model_sources": []
+}

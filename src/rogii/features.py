@@ -50,6 +50,16 @@ GR_DWT_FEATURES = [
     "gr_dwt_detail_energy",
 ]
 
+# BEAM_FEATURES is populated lazily by beam_search._register_beam_features().
+# Import beam_search and call _register_beam_features() to populate it.
+BEAM_FEATURES: list[str] = []
+
+Z_DRIFT_FEATURES = [
+    "z_drift_offset_at_anchor",
+    "z_drift_implied_tvt",
+    "z_drift_implied_tvt_resid",
+]
+
 DTW_FEATURES = [
     "dtw_optimal_tvt",
     "dtw_cost_cumulative",
@@ -137,6 +147,42 @@ def build_geometry_features(horizontal: pd.DataFrame) -> pd.DataFrame:
     feats["dxdmd"] = (x.diff() / safe_diff).fillna(0.0)
     feats["dydmd"] = (y.diff() / safe_diff).fillna(0.0)
     feats["dzdmd"] = (z.diff() / safe_diff).fillna(0.0)
+
+    return feats
+
+
+def build_z_drift_features(horizontal: pd.DataFrame) -> pd.DataFrame:
+    """Build TVT-Z drift physics features using flat anchor.
+
+    Based on Scott Weeden v13 insight: in the lateral section,
+    TVT ≈ Z + local_offset. The offset = last_tvt_input − Z_at_PS
+    is a well-level constant that encodes the Z→TVT mapping.
+
+    All inputs (Z, TVT_input up to PS) are available at prediction time.
+    No target leakage: does not use post-PS TVT.
+    """
+    n = len(horizontal)
+    feats = pd.DataFrame(index=horizontal.index)
+
+    last_tvt = last_known_tvt_input_value(horizontal)
+    if np.isnan(last_tvt):
+        feats["z_drift_offset_at_anchor"] = 0.0
+        feats["z_drift_implied_tvt"] = 0.0
+        feats["z_drift_implied_tvt_resid"] = 0.0
+        return feats
+
+    ps_idx = _ps_index(horizontal)
+    z_at_ps = float(horizontal["Z"].iloc[ps_idx])
+
+    offset = last_tvt - z_at_ps
+    feats["z_drift_offset_at_anchor"] = offset
+
+    z = horizontal["Z"].astype(float)
+    implied_tvt = z + offset
+    feats["z_drift_implied_tvt"] = implied_tvt
+
+    resid = implied_tvt - last_tvt
+    feats["z_drift_implied_tvt_resid"] = np.clip(resid, -100.0, 100.0)
 
     return feats
 
@@ -308,6 +354,8 @@ def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
                    include_typewell: bool = False,
                    include_dtw: bool = False,
                    include_geology: bool = False,
+                   include_beam: bool = False,
+                   include_z_drift: bool = False,
                    typewell_summary_only: bool = False,
                    dwt_window: int = 256,
                    dwt_min_window: int = 16) -> pd.DataFrame:
@@ -321,6 +369,8 @@ def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
     are added and geometry features are automatically included.
     When include_gr=True, GR-derived rolling/lag/energy/envelope features are added.
     When include_gr_dwt=True, causal GR DWT (wavelet) features are added.
+    When include_beam=True, Numba JIT beam search stratigraphic alignment
+    features are added. Requires a typewell DataFrame.
     When include_typewell=True, typewell-reference residual and summary features
     are added. Requires a typewell DataFrame.
     When typewell_summary_only=True, only summary features are built (no residuals).
@@ -376,6 +426,16 @@ def build_features(horizontal: pd.DataFrame, include_tvt_input: bool = False,
         from rogii.geology_features import build_geology_features
         geo_feats = build_geology_features(horizontal, typewell)
         features = pd.concat([features, geo_feats], axis=1)
+
+    if include_beam and typewell is not None:
+        from rogii.beam_search import build_beam_features, _register_beam_features
+        _register_beam_features()
+        beam_feats = build_beam_features(horizontal, typewell)
+        features = pd.concat([features, beam_feats], axis=1)
+
+    if include_z_drift:
+        z_drift_feats = build_z_drift_features(horizontal)
+        features = pd.concat([features, z_drift_feats], axis=1)
 
     return features
 

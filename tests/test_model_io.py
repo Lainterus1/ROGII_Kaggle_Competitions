@@ -29,10 +29,13 @@ def test_model_payload_stores_feature_contract() -> None:
         "include_trajectory": False,
         "include_typewell": False,
         "include_gr_dwt": False,
-            "include_spatial": False,
-            "include_dtw": False,
-            "include_geology": False,
-        }
+        "include_spatial": False,
+        "include_dtw": False,
+        "include_geology": False,
+        "include_beam": False,
+        "include_formation_plane": False,
+        "include_z_drift": False,
+    }
     assert payload["residual_target"] is True
 
 

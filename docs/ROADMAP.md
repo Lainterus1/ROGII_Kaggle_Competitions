@@ -27,16 +27,11 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|
-| Stage | **A2a** (DWT) |
-| Model | LightGBM |
-| Features | **20 features**: 6 base + 9 geometry + 3 GR + 2 DWT |
-| Target | `residual = TVT - last_tvt_input` |
-| Validation | 5-fold `GroupKFold` by well |
-| Local CV | RMSE `14.13 ± 0.77` |
-| Public LB | pending |
-| Explanation | `docs/HOW_IT_WORKS.md` |
+| Stage | **R1** (18 tabular features), LB 12.247 |
+| A2a | CV 14.13, LB 12.558 — DWT does not generalise, superseded |
+| Tabular ceiling | LB ~12.2, all A1-A4 experiments flat or degraded |
 
-Tabular feature ceiling confirmed at CV ~14.13. All subsequent feature blocks (spatial KNN, DTW, target engineering, geology v1/v2) produced flat or degraded CV. Active development focus shifts to architectural improvements (CNN, ensemble).
+Active development: **Tabular ceiling confirmed** — all feature families exhausted. Next: architecture diversity (CNN, ensemble).
 
 ## Guiding constraints
 
@@ -47,8 +42,9 @@ Tabular feature ceiling confirmed at CV ~14.13. All subsequent feature blocks (s
 - Do not use public saved model artifacts, TabICL artifacts or exact train/test coordinate overlap blending in the clean mainline roadmap.
 - Add new dependencies only as approved staged dependencies: `PyWavelets`, `scipy`, `catboost` and optionally `torch`.
 - Promote a stage only after tests pass, leakage review passes, submission validation passes, and CV improves or the stage produces useful diagnostics.
-- Kaggle submission is always manual. The project may generate and validate `submission.csv`, but the user performs the actual submit.
-- After a code push intended for Kaggle: `02_kaggle_update_repo` (Pull from GitHub → Run → Create Dataset `rogii-repo`) → `01_kaggle_train` if model changed (Pull from GitHub → Run → Create Dataset `rogii-models`) → `00_kaggle_inference` (Run, internet OFF → Submit). Notebooks `01` and `02` are GitHub-linked (setup once via File → Link to GitHub). See `.agents/skills/kaggle-runner/SKILL.md`.
+- Kaggle submission requires explicit user approval. After approval, the agent may submit a validated kernel version through Kaggle CLI/API.
+- Current stable offline submit path: `00-rogii-inference-r1` uses `rogii-repo-v2` + `rogii-models-v2`, internet OFF, and `notebooks/kernel-metadata.json` for `kaggle kernels push -p notebooks`.
+- For candidate builds, do not overwrite R1 fallback artifacts. Use candidate-specific model/dependency datasets and kernel metadata. Update `rogii-repo-v2` first if source code changed.
 
 ## Standard Gate After Each Stage
 
@@ -61,7 +57,8 @@ Tabular feature ceiling confirmed at CV ~14.13. All subsequent feature blocks (s
 7. Update `docs/EXPERIMENT_LOG.md` after meaningful runs.
 8. Update `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/VALIDATION_STRATEGY.md` or `docs/KNOWN_ISSUES.md` when stage status, validation contracts or risks change.
 9. Do not commit `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`, OOF artifacts or generated submissions.
-10. After a code push: open `02` → Pull from GitHub → Run → Create Dataset `rogii-repo` → if model changed, open `01` → Pull from GitHub → Run → Create Dataset `rogii-models` → open `00` → Run (offline) → Submit.
+10. For R1 recovery submissions: push `00` with `kaggle kernels push -p notebooks`, validate kernel output, then submit the kernel version with `kaggle competitions submit -k daniilgonchar/00-rogii-inference-r1 -v <version> -f submission.csv` after explicit approval.
+11. For candidate submissions: update repo dataset if code changed, train/upload a candidate model dataset, attach offline dependency dataset if needed, push a candidate kernel version, validate output, then submit the candidate kernel version after explicit approval.
 
 ## Stage A0: Pipeline Contracts and Roadmap Reset
 
@@ -75,7 +72,7 @@ Scope:
 - Keep R1 optimized as the active baseline and Stage 4 as the historical frozen baseline.
 - Ensure model payloads carry enough metadata to reproduce prediction: feature flags, target mode, feature columns and run name.
 - Sync README and config examples with the currently supported CLI commands.
-- Keep Kaggle workflow: training notebook (`01_kaggle_train.ipynb`) saves model to `rogii-models` Kaggle Dataset; inference notebook (`00_kaggle_inference.ipynb`) loads model and generates submission (ADR-007).
+- Keep Kaggle workflow: training notebook (`01_kaggle_train.ipynb`) saves R1 model to `rogii-models-v2`; inference notebook (`00_kaggle_inference.ipynb`) loads `rogii-repo-v2` + `rogii-models-v2` and generates a validated submission (ADR-007, ADR-013).
 
 Primary files:
 
@@ -209,6 +206,124 @@ Promotion gate:
 
 - Promote only if ensemble OOF improves over the best single model and Kaggle runtime remains acceptable.
 
+## Stage B1: Beam Search Stratigraphic Alignment
+
+Status: **Rejected.** CV 14.43 (5-fold) vs R1 14.19 — worse by +0.24. `beam_std` is #2 feature (6.2% importance) but cannibalizes X/Y/Z spatial importance: X 17%→5.6%, Y 14.9%→5.5%, Z 12.5%→6.0%. Beam-only (no geometry/GR) scores CV 16.02 — worse than naive baseline (15.91). Same pattern as typewell/DTW/geology — typewell-referenced features redistribute without net gain. Code kept in `src/rogii/beam_search.py`, feature flag `include_beam` available for future compound experiments.
+
+Goal: implement Numba JIT beam search along typewell GR to produce TVT alignment signals that close the gap between our tabular baseline (LB 12.2, CV 14.1) and top public solutions (LB 5.9–7.5).
+
+### Why
+
+All top public solutions (Roman Tamrazov sub-9, Ravaghi hill-climbing, Pilkwang EDA) use physics-based stratigraphic alignment (beam search, particle filters, NCC) rather than pure tabular features. Our tabular approach is confirmed saturated at LB 12.2 / CV 14.1. Beam search is the strongest single alignment signal observed in public code.
+
+### Scope
+
+- `src/rogii/beam_search.py` — Numba JIT beam search kernel (`_beam_jit`) + feature builder (`build_beam_features`).
+- 7 beam configs with diverse move_cost / emit_scale / smooth_radius.
+- ~19 features: per-config TVT estimates, consensus (avg cons+sm5), std, consensus differences at 11 offsets (−40..+40).
+- `include_beam` flag in model payload v2 (`FEATURE_FLAG_KEYS`).
+- Optional GPU for LightGBM training (auto-detect, fallback CPU). Beam search runs on CPU via Numba JIT.
+
+### Dependencies
+
+- `numba` (new, approved) — CPU JIT compilation for beam search.
+- `scipy` (already approved).
+
+### Primary files
+
+- `src/rogii/beam_search.py` — new module
+- `src/rogii/features.py` — `BEAM_FEATURES`, `include_beam` integration
+- `src/rogii/model_io.py` — `include_beam` flag in `FEATURE_FLAG_KEYS`
+- `scripts/run_train.py`, `scripts/run_predict.py` — `--include-beam` CLI flag
+- `configs/b1_lgbm.yaml` — beam config
+- `tests/test_beam_search.py` — 9 tests including causal verification
+- `requirements.txt` — added `numba`
+
+### Verification
+
+- `python -m pytest tests/test_beam_search.py` — 9 tests including JIT compilation, causal construction, shape checks
+- `python scripts/run_train.py --config configs/b1_lgbm.yaml --data-dir data`
+- `python scripts/run_predict.py --data-dir data --model models/b1_lgbm.pkl --output outputs/submission.csv`
+- `python scripts/validate_submission.py --submission outputs/submission.csv`
+- Kaggle: `kaggle kernels push -p notebooks/kernels/b1-beam/` (with numba offline)
+
+### Promotion gate
+
+- CV improves by > 1.0 RMSE vs R1 (14.19) → target < 13.0.
+- Beam search is causal (verified by `test_beam_causal_construction`).
+- Numba JIT compiles without errors on Kaggle.
+- Runtime < 10 min full train locally.
+
+## Stage PrP3: Post-Processing Pipeline (Savgol Smoothing + TVT Clipping)
+
+Goal: Improve CV/LB through per-well post-processing of predicted TVT sequences without changing model architecture or features.
+
+Status: **Evaluated. Savgol w=31 p=2 promoted. TVT clipping rejected.**
+
+Results (OOF 5-fold CV, 3.78M rows, 773 wells):
+
+| Config | OOF RMSE | vs Raw |
+|--------|----------|--------|
+| **Savgol w=31 p=2** | **14.2123** | **−0.0064** |
+| Savgol w=25 p=2 | 14.2128 | −0.0059 |
+| Savgol w=17 p=3 | 14.2135 | −0.0052 |
+| Savgol w=11 p=2 | 14.2141 | −0.0046 |
+| Savgol w=5 p=2 | 14.2154 | −0.0033 |
+| Raw (no postproc) | 14.2187 | reference |
+| Clip p0.1-p99.9 + Savgol w=31 | 14.2208 | +0.0021 |
+
+TVT clip bounds (p0.1-p99.9): [9851.80, 12860.23]. Only 0.2% of data outside.
+Per-well visualization: 3/3 wells improved, max raw jump 1.6-4.1 ft (noise, not geology).
+
+Decision: **Savgol w=31 p=2 PROMOTED. TVT clipping REJECTED.** Savgol is now the recommended default post-processing step. Default params updated: window=17→31, polyorder=3→2.
+
+Scope:
+
+- `src/rogii/smoothing.py` — added `clip_predictions()`, `compute_tvt_clip_bounds()`, `apply_postprocessing()` (clip → smooth chain).
+- `src/rogii/train.py` — CV loop collects per-well OOF predictions; `evaluate_postprocessing()` tests all Savgol window/polyorder/clip bound combos and ranks by OOF RMSE.
+- `scripts/run_train.py` — added `--eval-postproc` flag.
+- `scripts/run_predict.py` — added `--savgol-window`, `--savgol-polyorder`, `--tvt-clip` flags. Auto-detects clip bounds from model payload.
+- `scripts/inspect_tvt_range.py` — new diagnostic script for TVT percentile analysis.
+- `scripts/visualize_postproc.py` — new per-well visualization script with continuity checks.
+- `src/rogii/model_io.py` — `clip_lower` / `clip_upper` stored in model payload v2.
+- `tests/test_baseline.py` — 7 new clipping + apply_postprocessing tests (17 total).
+
+Tunable parameters:
+
+| Param | Default | Grid search |
+|---|---|---|
+| Savgol window | 17 | [5, 11, 17, 25, 31] |
+| Savgol polyorder | 3 | [2, 3] |
+| Clip bounds | p0.1–p99.9 from train TVT | none, p0.1-p99.9, p0.5-p99.5, p1-p99 |
+| Order | clip → smooth | fixed |
+
+Primary files:
+
+- `src/rogii/smoothing.py`
+- `src/rogii/train.py`
+- `src/rogii/model_io.py`
+- `scripts/run_train.py`
+- `scripts/run_predict.py`
+- `scripts/inspect_tvt_range.py`
+- `scripts/visualize_postproc.py`
+- `tests/test_baseline.py`
+
+Verification:
+
+- `python -m pytest tests/test_baseline.py` — 17 tests pass
+- `python scripts/inspect_tvt_range.py --data-dir data` — prints TVT percentile table with suggested clip bounds
+- `python scripts/run_train.py --config configs/baseline_lgbm.yaml --data-dir data --eval-postproc` — prints OOF post-processing evaluation table (top 15 configs sorted by RMSE)
+- `python scripts/visualize_postproc.py --data-dir data --model models/r1_lgbm.pkl` — generates per-well comparison plots
+- `python scripts/run_predict.py --data-dir data --model models/r1_lgbm.pkl --savgol-smooth --tvt-clip --output outputs/submission.csv` — generates clipped+smoothed submission
+
+Promotion gate:
+
+- OOF CV RMSE with best postproc config ≤ raw OOF CV RMSE (no degradation).
+- Per-well visualization shows smoothing does not erase real formation boundaries.
+- Continuity check: max jump ≤ 30 ft for ≥ 99% of adjacent points after smoothing.
+- If CV improves: update active baseline config and LB-submit.
+- If CV flat: keep code as optional pipeline, do not change active baseline.
+
 ## Stop Criteria
 
 | Signal | Action |
@@ -236,5 +351,9 @@ Promotion gate:
 | Public saved artifacts / TabICL artifact stack | Rejected for clean mainline | Opaque external artifacts and heavy dependency path |
 | Exact train/test coordinate overlap blend | Rejected for clean mainline | High leakage risk; diagnostics only |
 | Particle filters | Deferred | Complex and stochastic |
+| **Beam Search (B1)** | **Rejected** | CV 14.43 (worse than R1 14.19). beam_std — #2 feature but cannibalizes X/Y/Z. Beam-only CV 16.02. Typewell-GR alignment adds no net signal. |
+| **Slope baseline (B2b)** | **Rejected** | Best CV 14.16 (slope_recent) flat vs R1. slope_md CV 284, wls CV 130. TVT-vs-MD trend does not extrapolate after PS — wells change direction. |
+| **Formation Plane KNN (B3)** | **Rejected** | CV 14.99 (+0.80 vs R1). fp_knn_mean_dist #5 feature but cannibalizes X/Y/Z (35% importance from spatial coordinates). Well-level formation imputation via KNN adds no net signal. |
+| **Z-Drift Physics (PrP2)** | **Not promoted** | CV 14.20 (flat vs R1 14.19, +0.01). 3 TVT-Z coupling features. Only offset_at_anchor is new signal; implied_tvt = Z+const, implied_tvt_resid = dz_since_ps (r=1.0). Fold inconsistency: fold 2 -0.80, fold 3 +0.62. Code kept behind include_z_drift flag. |
 | **1D CNN sequence model** | **Deferred for A4+** | Architecture diversity, not feature; revisit after tabular ceiling |
 | **Multi-seed LGBM + CatBoost + stacking** | **Deferred for A4+** | Cosmetic ensemble on same features |

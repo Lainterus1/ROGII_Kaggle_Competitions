@@ -59,7 +59,7 @@ The project will use:
 | Prediction | Load trained model/config and produce predictions | `src/rogii/predict.py`, `scripts/run_predict.py` |
 | Submission | Validate and write `submission.csv` | `src/rogii/submission.py`, `scripts/validate_submission.py` |
 | MLflow tracking | Centralized run metadata, metrics and artifacts | `src/rogii/mlflow_utils.py` |
-| Kaggle runner | Thin execution wrappers for Kaggle: training and inference | `scripts/kaggle_runner.py`, `notebooks/00_kaggle_inference.ipynb`, `notebooks/01_kaggle_train.ipynb` |
+| Kaggle runner | Thin execution wrappers for Kaggle: training, inference and offline path discovery | `src/rogii/kaggle_runtime.py`, `scripts/kaggle_offline_inference.py`, `scripts/kaggle_runner.py`, `notebooks/00_kaggle_inference.ipynb`, `notebooks/01_kaggle_train.ipynb`, `notebooks/kernel-metadata.json` |
 | Tests | Submission, validation, metric and smoke contracts | `tests/` |
 
 ## Boundaries
@@ -83,7 +83,8 @@ The project will use:
 8. Training saves a versioned model payload with target mode, feature flags and exact feature columns.
 9. Prediction validates the generated feature matrix against the saved payload before writing `submission.csv` with schema matching `sample_submission.csv`.
 10. Kaggle runner executes the same repository code on Kaggle full data.
-11. User manually submits validated output to Kaggle and records public LB score in docs and MLflow notes.
+11. Offline inference resolves mounted repo/model/data paths by file markers, validates `submission.csv`, and can be submitted through a user-approved Kaggle kernel-version submit.
+12. User or explicitly approved agent submission records public LB score in docs and MLflow notes.
 
 ## Dependencies
 
@@ -102,16 +103,18 @@ Optional later dependencies must be justified before adding.
 - Local machine is the main development environment.
 - Public GitHub repo `https://github.com/Lainterus1/ROGII_Kaggle_Competitions` is the source of truth.
 - Kaggle is a remote executor for full-data runs and submission generation.
-- Kaggle submissions are manual and require explicit user approval.
+- Kaggle submissions require explicit user approval; after approval, an agent may submit a validated kernel version through the Kaggle CLI/API.
 - Local MLflow uses `mlruns/`; Kaggle may use `/kaggle/working/mlruns`.
-- Kaggle notebook can clone the public repo without GitHub auth or Kaggle Secrets.
+- Kaggle training/update notebooks can clone the public repo without GitHub auth or Kaggle Secrets.
+- Kaggle offline inference uses `rogii-repo-v2` and `rogii-models-v2` Datasets with internet OFF and versioned kernel metadata.
 
 ## Architecture risks
 
 - Some modules will be thin until actual data schema is known.
 - Kaggle official pages may require Kaggle API or authenticated access for full details.
 - Validation cannot be finalized until group/well IDs are confirmed.
-- Kaggle runner still depends on pushed repository code being available on `main`.
+- Training and repo-update notebooks still depend on pushed repository code being available on `main`.
+- A2a DWT inference is now packaged: `rogii-wheels-a2a-dwt` (pywavelets) + `rogii-models-a2a-dwt` + kernel `00-rogii-inference-a2a-dwt`. Kaggle base env also has pywavelets 1.9.0 pre-installed.
 
 ## Alternatives considered
 

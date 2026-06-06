@@ -37,7 +37,7 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 - **A2a DWT baseline: 20 features (+2 causal GR DWT), residual target, CV RMSE `14.13`, LB pending.**
 - `docs/HOW_IT_WORKS.md` — feature-by-feature explanation including DWT.
 - Staged roadmap A0-A4. A1-A4 feature experiments completed, tabular ceiling confirmed at CV ~14.13.
-- 106 tests, all green.
+- 113 tests, all green.
 
 Следующее:
 
@@ -82,11 +82,12 @@ python scripts/validate_submission.py --data-dir data --submission outputs/submi
 
 Kaggle workflow:
 
-- Код разрабатывается локально и пушится в GitHub или обновляется в Kaggle Dataset, в зависимости от текущего notebook workflow.
-- Ноутбук соревнования остается thin runner: install/prepare repo, run train, run predict, run validator.
-- `submission.csv` генерируется и валидируется в `/kaggle/working`.
-- Фактический submit на Kaggle выполняет только пользователь вручную.
-- После подтверждения пуша в Kaggle агент должен написать точные инструкции, какие строки/команды изменить в ноутбуке соревнования.
+- Stable R1 submit path uses `daniilgonchar/00-rogii-inference-r1` with internet OFF, `rogii-repo-v2`, `rogii-models-v2` and `notebooks/kernel-metadata.json`.
+- Push the inference kernel with `kaggle kernels push -p notebooks`.
+- Validate the generated `/kaggle/working/submission.csv` from kernel output before submission.
+- For code-competition submit, use the kernel version output: `kaggle competitions submit -c rogii-wellbore-geology-prediction -k daniilgonchar/00-rogii-inference-r1 -v <version> -f submission.csv -m "..."`.
+- A2a DWT inference still needs offline `pywavelets` packaging before it can replace R1 in internet-OFF Submit reruns.
+- For A2a or any future candidate, keep R1 fallback untouched: update `rogii-repo-v2` if code changed, upload a candidate model dataset, attach an offline dependency dataset when needed, push a candidate kernel, validate output, then submit that kernel version.
 
 ## Документация
 

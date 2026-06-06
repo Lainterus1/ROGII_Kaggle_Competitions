@@ -58,7 +58,29 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Deferred | Medium | Multi-seed LGBM + CatBoost + Ridge stacking — cosmetic ensemble on same features |
 | Deferred | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
 | Done | High | Split Kaggle runner into separate training and inference notebooks (ADR-007) |
-| In Progress | High | Submit A2a to Kaggle: prediction validated locally, docs updated, awaiting Kaggle run |
+| Done | High | Repair R1 offline Kaggle inference workflow: marker-based path discovery, kernel metadata, version 3 output validation |
+| Done | High | Generalize Kaggle workflow docs for A2a and future candidate builds with separate model/dependency/kernel artifacts |
+| Done | High | Add `kaggle-candidate-build` skill for strict packaging of future Kaggle candidate builds |
+| Done | Medium | Record public LB for R1 fixed workflow submission `53410572`: `12.247` |
+| Done | High | Submit A2a to Kaggle: LB `12.558` (+0.311 vs R1 12.247), DWT doesn't generalize — R1 remains active baseline |
+| Done | High | Analyse public notebooks, define Stage B1 (Beam Search Stratigraphic Alignment), implement `src/rogii/beam_search.py` with 9 tests |
+| Done | High | Stage B1: train beam search model (`configs/b1_lgbm.yaml`), evaluate CV — 5-fold 14.43 vs R1 14.19 (worse by +0.24). Beam features cannibalize X/Y/Z importance. |
+| Cancelled | High | Stage B1: Kaggle candidate build — CV degraded, not promoted. |
+| Rejected | High | Stage B1: Beam Search Stratigraphic Alignment — CV 14.43 (worse than R1 14.19). beam_std #2 feature but redistributes spatial importance without net gain. Same pattern as typewell/DTW/geology. |
+| Done | High | Stage B2b: implement slope-based baseline methods (slope_md, slope_recent, wls, slope_z) + Savgol smoothing — tests pass (132), smoke OK |
+| Rejected | High | Stage B2b: train baseline variants — best CV 14.16 (slope_recent) flat vs R1 14.19. slope_md CV 284, wls CV 130. TVT-vs-MD trend does not extrapolate after PS. Flat baseline remains optimal. |
+| Done | High | Stage B3: implement Formation Plane KNN — `formation_plane.py`, 7 tests, fold-aware OOF |
+| Not promoted | High | **PrP2: Z-Drift Physics Features** — 3 TVT-Z coupling features (offset_at_anchor, implied_tvt, resid). CV 14.20 (flat vs R1 14.19, +0.01). 2/3 features are linear duplicates of dz_since_ps and Z. Fold inconsistency: fold 2 improved 0.80, fold 3 degraded 0.62. Same pattern as geology v1. Code kept behind `include_z_drift` flag. |
+| Done | High | **PrP3 Phase 1**: Create `scripts/inspect_tvt_range.py` — scans train TVT, prints percentiles and suggested clipping bounds |
+| Done | High | **PrP3 Phase 2**: Add `clip_predictions()`, `compute_tvt_clip_bounds()`, `apply_postprocessing()` to `src/rogii/smoothing.py`. 7 new tests (17 total). |
+| Done | High | **PrP3 Phase 3**: Modify `train.py` — collect per-well OOF predictions during CV, add `evaluate_postprocessing()` grid search, add `--eval-postproc` to `run_train.py`. |
+| Done | High | **PrP3 Phase 4**: Wire postproc into `run_predict.py` — add `--savgol-window`, `--savgol-polyorder`, `--tvt-clip` flags. Store clip bounds in `model_io.py` payload. |
+| Done | Medium | **PrP3 Phase 5**: Grid search integrated via `--eval-postproc` in `run_train.py` (tests Savgol windows [5,11,17,25,31] × polyorders [2,3] × clip bounds [none, p0.1-p99.9, p0.5-p99.5, p1-p99]). |
+| Done | Medium | **PrP3 Phase 6**: Create `scripts/visualize_postproc.py` — per-well raw vs smoothed vs true TVT plots with continuity checks. |
+| Done | High | **PrP3 Phase 7**: Document ADR-018 (DECISIONS.md), Stage PrP3 (ROADMAP.md), tasks (TASKS.md), update KNOWN_ISSUES.md. |
+| In progress | High | **PrP3 Evaluation**: Run `--eval-postproc` CV to determine best Savgol window + clip config on OOF predictions |
+| Done | High | **PrP3 Evaluate**: Savgol w=31 p=2 best (OOF 14.2123 vs raw 14.2187, −0.0064). All Savgol configs beat raw. Clipping rejected (+0.002). 3/3 wells improved in per-well viz. Defaults updated to w=31 p=2. |
+| Pending | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 to LB |
 
 ## Open questions
 

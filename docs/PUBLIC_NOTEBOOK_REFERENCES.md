@@ -27,7 +27,9 @@ Reviewed public notebooks:
 | Notebook | Reviewed idea | Decision |
 |---|---|---|
 | https://www.kaggle.com/code/nihilisticneuralnet/9-251-rogii-wellbore-geology-prediction-dwt-based/notebook | Residual target, rolling/lag GR features, geometry features, typewell/DTW/beam/PF feature families, LGBM/CatBoost blending | Use as reference. Adopt residual, GR rolling, geometry and simple typewell ideas first. Defer DTW, beam, spatial KNN and particle filters until simpler roadmap stages stabilize. Do not copy notebook code blindly. |
-| https://www.kaggle.com/code/afr1ste/rogii-pf-beam-tabicl-stack-guide-9-062 | PF/beam/TabICL artifact stack, exact coordinate-overlap blend, validation/audit patterns | Use as reference only. Adopt output validation/audit mindset. Do not adopt public artifacts, TabICL stack or exact train/test coordinate overlap blend in the clean mainline roadmap. |
+| https://www.kaggle.com/code/romantamrazov/rogii-super-solution-lb-top-3/notebook | Beam search (±2 delta, 7 configs), particle filter (N=500), multi-scale NCC, formation plane KNN, LGBM+CatBoost hill-climbing ensemble | **Adopt beam search for B1.** Reference for algorithm implementation (cells 3-7). Defer PF, NCC, CatBoost, and hill climbing for later stages. |
+| https://www.kaggle.com/code/ravaghi/wellbore-geology-prediction-hill-climbing/notebook | Same beam+Pf+NCC pipeline with artifact caching, multiple LGBM/CB configs | **Adopt as secondary reference.** Validates beam configs and feature integration patterns. |
+| https://www.kaggle.com/code/pilkwang/rogii-eda-target-free-alignment-for-tvt/notebook | Target-free stratigraphic alignment, formation-aware TVT, DTW-like matching | **Reviewed.** Confirms alignment approach. No direct code adoption. |
 
 Rules:
 

@@ -4,6 +4,8 @@ outputs/
 models/
 submissions/
 mlruns/
+kaggle_datasets/
+wheels/
 
 # Common large or generated ML files
 *.csv

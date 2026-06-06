@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-06-06 — A2a Kaggle candidate packaging + LB result
+
+### Added
+- `notebooks/kernels/a2a-dwt/` — candidate kernel folder with `kernel-metadata.json` and `00_kaggle_inference.ipynb` for offline A2a DWT inference.
+- Kaggle datasets: `rogii-models-a2a-dwt` (trained A2a model), `rogii-wheels-a2a-dwt` (pywavelets 1.8.0 wheel).
+- `wheels/`, `kaggle_datasets/` — added to `.gitignore`.
+
+### Changed
+- `models/a2a_dwt.pkl` — retrained with current code; CV `14.13 ± 0.77` confirmed.
+- `docs/TASKS.md` — A2a submit task marked Done.
+- `docs/KNOWN_ISSUES.md` — A2a pywavelets dependency marked Resolved.
+- `docs/DECISIONS.md` — ADR-013 consequences updated: A2a no longer blocked.
+- `docs/EXPERIMENT_LOG.md` — new entry for A2a Kaggle packaging.
+
+### Verification
+- `python -m pytest tests` — 113 passed.
+- Kaggle kernel `daniilgonchar/00-rogii-inference-a2a-dwt` v1 produced validated `/kaggle/working/submission.csv` (14151 rows, 463970 bytes, 0 NaN, 0 Inf).
+- Kaggle logs confirmed: pywavelets found, repo/model/data paths resolved, 20 DWT features used, residual prediction mode.
+
+## 2026-06-06 - Kaggle offline inference workflow repair
+
+### Added
+- `src/rogii/kaggle_runtime.py` - marker-based Kaggle repo/model/data discovery and output checks.
+- `scripts/kaggle_offline_inference.py` - CLI wrapper for offline Kaggle inference.
+- `notebooks/kernel-metadata.json` - versioned metadata for `daniilgonchar/00-rogii-inference-r1` with internet OFF and fixed dataset/competition inputs.
+- `tests/test_kaggle_runtime.py` - tests for flat/nested repo datasets, hidden-style data roots, preferred model dataset selection and non-empty output validation.
+
+### Changed
+- `notebooks/00_kaggle_inference.ipynb` - removed hardcoded nested dataset path and shell-copy flow; now runs fail-fast marker-based offline inference.
+- `notebooks/01_kaggle_train.ipynb` - aligned stable R1 training artifact name to `baseline_lgbm.pkl` for `rogii-models-v2`.
+- `notebooks/02_kaggle_update_repo.ipynb` - aligned instructions with `rogii-repo-v2`.
+- `scripts/kaggle_runner.py` - delegates to the implemented offline inference runner instead of a placeholder error.
+- `configs/a2_lgbm.yaml` - corrected A2a DWT-only config by disabling spatial features.
+- `.agents/skills/kaggle-runner/SKILL.md` - replaced stale manual `rogii-repo` workflow with metadata-driven `rogii-repo-v2`/`rogii-models-v2` kernel-version submit workflow.
+- `.agents/skills/kaggle-runner/SKILL.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `README.md` - added a generic candidate build workflow for A2a and future variants, including separate model/dependency/kernel artifacts.
+- `.agents/skills/kaggle-candidate-build/SKILL.md` - added strict candidate packaging standard for future Kaggle builds.
+
+### Verification
+- `python -m pytest tests` - 113 passed.
+- Kaggle kernel `daniilgonchar/00-rogii-inference-r1` version 3 produced validated `/kaggle/working/submission.csv`.
+- Submission `53410572` confirmed the fixed R1 workflow public LB: `12.247`.
+
 ## 2026-06-05 — Stage A2-A4: Feature experiments
 
 ### Added

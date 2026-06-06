@@ -98,6 +98,16 @@ Planned architecture locations:
 | `notebooks/` | Thin Kaggle runner and lightweight EDA only |
 | `.agents/skills/` | Future reusable project-specific agent skills |
 
+Kaggle runner locations:
+
+| Path | Purpose |
+|---|---|
+| `src/rogii/kaggle_runtime.py` | Marker-based offline Kaggle repo/model/data discovery |
+| `scripts/kaggle_offline_inference.py` | Offline Kaggle inference CLI wrapper |
+| `notebooks/kernel-metadata.json` | Kaggle CLI metadata for `00-rogii-inference-r1` |
+| `.agents/skills/kaggle-runner/SKILL.md` | Current Kaggle runner workflow and validation checklist |
+| `.agents/skills/kaggle-candidate-build/SKILL.md` | Standard packaging contract for any new Kaggle candidate build |
+
 ## Open questions
 
 - None for current bootstrap navigation.

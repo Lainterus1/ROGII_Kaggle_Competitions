@@ -400,6 +400,157 @@ ADR-007 split training and inference into separate notebooks, but code updates s
 
 - None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.
 
+## ADR-018: Post-Processing Pipeline (PrP3) — Savgol Smoothing + TVT Clipping
+
+Date: 2026-06-06
+Status: Accepted
+
+### Context
+
+The tabular feature ceiling (CV ~14.1, LB ~12.2) is confirmed after 14+ rejected experiments. All feature families are exhausted. The remaining path for improvement within tabular models is post-processing: per-well smoothing of predicted TVT sequences and clipping to a reasonable physical range.
+
+The Savgol smoothing code already existed in `src/rogii/smoothing.py` (ADR-015, B2b) but was never tested on real predictions. TVT clipping was a new idea — out-of-bounds predictions harm RMSE disproportionately.
+
+### Decision
+
+- Implement TVT clipping (`clip_predictions`) and AUX function (`compute_tvt_clip_bounds`) in `src/rogii/smoothing.py`.
+- Implement unified `apply_postprocessing()` that chains clip → smooth.
+- Add `--eval-postproc` flag to `run_train.py` that collects per-well OOF predictions and evaluates all post-processing configs (Savgol windows [5,11,17,25,31], polyorders [2,3], clip bounds [p0.1-p99.9, p0.5-p99.5, p1-p99]).
+- Store `clip_lower` / `clip_upper` in model payload so predict can apply clipping without re-scanning train data.
+- Add `--tvt-clip`, `--savgol-window`, `--savgol-polyorder` flags to `run_predict.py`.
+- Order of operations: clip → smooth (remove outliers before filter).
+- Default Savgol params: window=17, polyorder=3 (original hardcoded values from ADR-015).
+- Scott Weeden v13 params (window=11, polyorder=2) included in grid search.
+- Continuity check: max jump ≤ 30 ft between adjacent TVT predictions.
+
+### Alternatives considered
+
+- Smooth → clip order: rejected because outliers would distort the Savgol filter.
+- Hardcoded clip bounds [11700, 12500] (plagiagia): rejected; use data-driven percentiles from train TVT.
+- Separate grid search script: rejected; `--eval-postproc` in `run_train.py` is sufficient and avoids code duplication.
+
+### Consequences
+
+#### Positive
+
+- Post-processing is orthogonal to feature/model development — it can improve any model's predictions.
+- CV evaluation of post-processing uses honest OOF predictions (per-well grouping, same folds as raw CV).
+- Clip bounds auto-detected from train data, no magic numbers.
+- Model payload carries clip bounds for reproducible prediction-time post-processing.
+
+#### Negative
+
+- Savgol may smooth real formation boundaries (step changes in TVT). Per-well visualization needed as safeguard.
+- Post-processing cannot fix systematic bias — only noise reduction.
+- Expected improvement is marginal (0.05–0.2 RMSE) given the tabular ceiling.
+
+#### Follow-up
+
+- Ran `inspect_tvt_range.py` → clip bounds p0.1-p99.9 = [9851.80, 12860.23].
+- Ran `run_train --eval-postproc` → Savgol w=31 p=2 best OOF RMSE 14.2123 vs raw 14.2187 (−0.0064). All Savgol configs beat raw. Clipping degrades (14.2208, +0.002).
+- Ran `visualize_postproc.py` → 3/3 wells improved, raw max jumps 1.6-4.1 ft (noise, not geology), continuity excellent.
+- **Savgol w=31 p=2 PROMOTED as recommended post-processing.**
+- **TVT clipping REJECTED** — 0.2% of data outside [9852, 12860], clipping adds marginal error.
+- Updated defaults: window=31, polyorder=2.
+
+## ADR-014: B1 Beam Search rejected — typewell alignment adds no net signal
+
+Date: 2026-06-06  
+Status: Accepted
+
+### Context
+
+Stage B1 implemented Numba JIT beam search stratigraphic alignment: 7 beam configs with diverse move_cost / emit_scale, producing 19 features (per-config TVT estimates, consensus, std, consensus differences at 11 offsets). 9 tests verified JIT compilation, causal construction, and shape checks.
+
+### Decision
+
+Reject B1. Full CV 14.43 (5-fold) vs R1 14.19 (+0.24 worse). Beam-only (no geometry/GR): CV 16.02 (worse than naive 15.91).
+
+Root cause: `beam_std` is #2 feature by importance (6.2%) but cannibalizes X/Y/Z spatial coordinate importance:
+
+| Feature | R1 % | B1 % | Delta |
+|---|---|---|---|
+| X | 17.0% | 5.6% | -11.3% |
+| gr_energy | 15.3% | 7.5% | -7.8% |
+| Y | 14.9% | 5.5% | -9.4% |
+| Z | 12.5% | 6.0% | -6.5% |
+
+Beam features act as noisy proxies for spatial coordinates — they predict TVT through a roundabout pathway (GR → beam path → TVT estimate → prediction) that is less reliable than direct X/Y/Z → TVT.
+
+This is consistent with all previous typewell-referenced experiments:
+- R2 typewell residuals: CV 14.75 (+0.66 vs R1)
+- A3a DTW alignment: CV 14.63 (+0.50 vs A2a)
+- A4 geology v1/v2: degraded or flat
+- B1 beam search: CV 14.43 (+0.24 vs R1)
+
+### Consequences
+
+- Code kept in `src/rogii/beam_search.py` behind `include_beam` feature flag for future compound experiments.
+- Tabular feature ceiling at CV ~14.1 reconfirmed. 8 feature families tested, 2 promoted (geometry/GR → R1, DWT → A2a), 6 rejected/deferred.
+- Future improvement requires architectural change: CNN for sequence modeling or ensemble methods (A4+ deferred stages).
+
+## ADR-015: B2b Slope-Based Baseline Methods Rejected
+
+Date: 2026-06-06  
+Status: Accepted
+
+### Context
+
+Stage B2b tested replacing the flat `last_tvt_input` baseline with slope-based extrapolation from the known zone: `slope_md` (global MD trend), `slope_recent` (last 200 MD rows), `wls` (exponential-weighted recent MD), and `slope_z` (Z-based). The hypothesis was that providing the model with a smarter baseline (instead of a flat constant) would reduce residual magnitude and improve CV.
+
+### Decision
+
+Reject all slope-based baselines. Results:
+
+| Method | CV (3-fold) | vs R1 flat (14.19) |
+|---|---|---|
+| `flat` (R1) | 14.19 | reference |
+| `slope_recent` | 14.16 | flat |
+| `slope_md` | 284 | +19.9x worse |
+| `wls` | 130 | +9.2x worse |
+
+Root cause: TVT-vs-MD trend in the known zone does NOT linearly continue into the evaluation zone. After Prediction Start, wells frequently change direction (horizontal section, upward trajectory), making the global slope from the known zone a catastrophically wrong predictor. Even the local slope (`slope_recent`, using last 200 rows) does not outperform the flat baseline — the MD→TVT relationship at the PS boundary is not a reliable predictor of the evaluation zone trajectory.
+
+### Consequences
+
+- Code kept in `src/rogii/baseline.py` (5 methods via `compute_baseline()`) and `src/rogii/smoothing.py` (Savgol per-well smoothing).
+- `baseline_method` added to model payload v2 contract. Existing models default to `"flat"` for backward compatibility.
+- `--baseline-method` CLI flag available in `run_train.py` and `run_predict.py`.
+- Savgol smoothing (`--savgol-smooth`) available as post-processing in `run_predict.py` (not yet tested on real predictions — may provide marginal noise reduction independently of baseline method).
+- 10 new tests in `tests/test_baseline.py`. 132 tests total pass.
+- The flat baseline (`last_tvt_input`) remains the optimal residual base for this problem.
+
+## ADR-016: B3 Formation Plane KNN Rejected
+
+Date: 2026-06-06  
+Status: Accepted
+
+### Context
+
+Formation columns (ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA) exist in train horizontal wells but are absent in test. 765/773 wells have all 6 formations present. Formation depths vary per-row (within-well std 35-64m) but thicknesses between formations are constant within a well. The approach: impute formation depths for test wells via KNN (k=10) in (X, Y) plane, using well-median coordinates. 21 features: 6 raw depths, 6 Z-relative, 5 thicknesses, 1 nearest-formation distance, 3 KNN uncertainty. Implemented as fold-aware OOF, same pattern as spatial_features.
+
+### Decision
+
+Reject B3. CV 14.99 (3-fold) vs R1 14.19 (+0.80 worse).
+
+Root cause: same cannibalization pattern as B1:
+
+| Feature | R1 % | B3 % | Delta |
+|---|---|---|---|
+| X | 17.0% | 3.7% | -13.3% |
+| Y | 14.9% | 3.4% | -11.5% |
+| Z | 12.5% | 3.3% | -9.2% |
+
+FP features (especially `fp_knn_mean_dist` #5 at 5.0%, `fp_nearest_dist` #6 at 4.5%) take ~35% of model importance from spatial coordinates without adding net signal. The KNN-imputed formation depths act as noisy proxies for the direct X/Y/Z → TVT pathway.
+
+### Consequences
+
+- Code kept in `src/rogii/formation_plane.py` (3 functions), feature flag `include_formation_plane` in payload v2.
+- 7 new tests in `tests/test_formation_plane.py`. 139 total tests pass.
+- 12+ feature families tested, 2 promoted (geometry/GR → R1, DWT → A2a superseded), 10+ rejected/deferred.
+- Tabular ceiling at CV ~14.1 and LB ~12.2 is now strongly confirmed.
+- Remaining path: architecture change (CNN, ensemble) — A4+ deferred stages.
+
 ## ADR-009: A2a DWT promoted as active baseline
 
 Date: 2026-06-05  
@@ -416,8 +567,8 @@ Promote A2a as active baseline. CV 14.13 vs R1 14.19 (+0.06). Feature flag `incl
 ### Consequences
 
 - Active baseline: 20 features (6 base + 9 geometry + 3 GR + 2 DWT).
-- Marginal improvement; DWT is a better GR filter, not a new information source.
-- Kaggle submission pending to verify LB gap.
+- Marginal CV improvement; DWT is a better GR filter, not a new information source.
+- Superseded by R1: LB 12.558 worse than R1 12.247 (+0.311). DWT does not generalize. R1 remains active baseline.
 
 ## ADR-010: A3 DTW, signed-log, derivative — all rejected
 
@@ -472,3 +623,58 @@ Acknowledge tabular feature ceiling at CV ~14.13 for LightGBM with features deri
 
 - Active feature development paused. Focus shifts to A4+: CNN, multi-model ensemble.
 - Existing feature flags preserved for future compound experiments.
+
+## ADR-013: Metadata-driven offline Kaggle inference submit
+
+Date: 2026-06-06
+Status: Accepted
+
+### Context
+
+Kaggle Submit reruns code with internet OFF. The previous `00-rogii-inference-r1` notebook searched for a single nested `rogii-repo-v2/ROGII_Kaggle_Competitions*` layout, but the active `rogii-repo-v2` Dataset is mounted as a flat repository. This caused notebook rerun failures and zero-byte submissions without LB scores.
+
+### Decision
+
+- Keep the active recovery path as R1 inference with `rogii-repo-v2` and `rogii-models-v2` until A2a offline dependencies are packaged.
+- Use marker-based Kaggle path discovery: repo root must contain `scripts/run_predict.py` and `src/rogii`; data root must contain `sample_submission.csv` and `test/`; model path is selected by `baseline_lgbm.pkl` with a preference for `rogii-models-v2`.
+- Store `notebooks/kernel-metadata.json` so the inference kernel can be updated with `kaggle kernels push -p notebooks` and fixed inputs/internet settings.
+- Submit through Kaggle's code-competition kernel-version mode after explicit approval: `kaggle competitions submit -k <kernel> -v <version> -f submission.csv`.
+- Treat R1 as the recovery/fallback submit path. Candidate builds such as A2a must use explicit candidate artifacts: repo dataset, model dataset, dependency dataset when needed, kernel metadata and kernel slug.
+- If a candidate needs packages unavailable in internet-OFF submit reruns, package them as an attached offline dependency dataset instead of relying on `pip install` from the internet.
+
+### Consequences
+
+- Offline R1 inference no longer depends on fragile dataset nesting or manual notebook cell edits.
+- The kernel output is validated before submission and fails loudly if `submission.csv` is missing or empty.
+- Direct file submission remains unsupported for this competition; kernel-version submit is the supported agent path.
+- A2a DWT submission is now unblocked: `pywavelets` packaged as offline dependency dataset `rogii-wheels-a2a-dwt`; kernel `00-rogii-inference-a2a-dwt` v1 validated.
+- New candidates can follow the same systematic flow without changing R1 fallback artifacts.
+
+## ADR-017: PrP2 Z-Drift Physics Features Not Promoted
+
+Date: 2026-06-06  
+Status: Accepted
+
+### Context
+
+Scott Weeden v13 suggested a TVT-Z coupling physics prior: in the lateral section, TVT ≈ Z + local_offset. The idea is to compute `offset = last_tvt_input − Z_at_PS` and use it to derive `implied_tvt = Z + offset` and `resid = implied_tvt − last_tvt_input` as features. Matteo Niccoli confirmed dTVT/dZ = +0.057 in lateral — formation nearly flat, offset stable.
+
+### Decision
+
+Reject PrP2. 5-fold CV 14.20 vs R1 14.19 (+0.01, flat). Fold inconsistency: fold 2 improved by 0.80, fold 3 degraded by 0.62 — no consistent signal.
+
+### Root Cause
+
+Only 1 of 3 features carries new signal:
+- `z_drift_offset_at_anchor` — new (well-level constant, encodes Z→TVT shift)
+- `z_drift_implied_tvt` = Z + offset — linear duplicate of Z (r=1.0, offset is well-constant)
+- `z_drift_implied_tvt_resid` = Z − Z_at_PS = dz_since_ps — identical duplicate (r=1.0)
+
+The one novel feature (offset_at_anchor) is a well-level constant — LightGBM cannot split on it effectively because its value is identical for all rows in a well.
+
+### Consequences
+
+- Code kept in `src/rogii/features.py` (`Z_DRIFT_FEATURES`, `build_z_drift_features()`), feature flag `include_z_drift` integrated into payload v2.
+- 12 new tests in `tests/test_feature_engineering.py`. 151 total tests pass.
+- CLI flags `--include-z-drift` available in `run_train.py` and `run_predict.py`.
+- Tabular ceiling at CV ~14.1 reconfirmed: 14 feature families tested, 2 promoted, 12 rejected/not promoted.

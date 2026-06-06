@@ -1,7 +1,7 @@
 data_dir: /kaggle/input/competitions/rogii-wellbore-geology-prediction
 output_dir: /kaggle/working
 model_dir: /kaggle/working/models
-# Pre-trained model from rogii-models Kaggle Dataset (produced by 01_kaggle_train.ipynb)
-model_input: /kaggle/input/datasets/daniilgonchar/rogii-models/baseline_lgbm.pkl
+# Pre-trained model is auto-detected from the attached rogii-models-v2 Dataset.
+model_input: null
 submission_dir: /kaggle/working
 mlflow_tracking_uri: /kaggle/working/mlruns

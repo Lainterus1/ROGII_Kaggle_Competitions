@@ -1,5 +1,5 @@
 run:
-  name: a2a_lgbm_dwt
+  name: b3_lgbm_fplane
   type: model_baseline
   seed: 42
   environment: local
@@ -11,39 +11,30 @@ model:
   type: lightgbm
   params:
     objective: regression
-    learning_rate: 0.05
-    n_estimators: 1000
+    learning_rate: 0.03
+    n_estimators: 5000
+    num_leaves: 127
+    min_child_samples: 15
+    subsample: 0.75
+    subsample_freq: 1
+    colsample_bytree: 0.75
+    reg_lambda: 3.0
+    reg_alpha: 0.05
 
 features:
-  set_name: a2a_dwt
-  columns:
-    - MD
-    - X
-    - Y
-    - Z
-    - GR
-    - MD_relative
-    - md_since_ps
-    - frac_after_ps
-    - dx_since_ps
-    - dy_since_ps
-    - dz_since_ps
-    - dxy_since_ps
-    - dxdmd
-    - dydmd
-    - dzdmd
-    - gr_roll_mean_101
-    - gr_roll_std_101
-    - gr_energy
+  set_name: b3_fplane
   include_tvt_input: false
   include_geometry: true
   include_gr: true
-  include_gr_dwt: true
+  include_gr_dwt: false
+  include_beam: false
+  include_formation_plane: true
   include_typewell: false
   include_spatial: false
   include_dtw: false
   include_geology: false
   residual_target: true
+  baseline_method: flat
 
 validation:
   strategy: group_kfold
@@ -51,5 +42,5 @@ validation:
   group_column: well_id
 
 artifacts:
-  model_path: models/a2a_lgbm.pkl
+  model_path: models/b3_lgbm.pkl
   submission_path: outputs/submission.csv
