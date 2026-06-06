@@ -80,7 +80,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | **PrP3 Phase 7**: Document ADR-018 (DECISIONS.md), Stage PrP3 (ROADMAP.md), tasks (TASKS.md), update KNOWN_ISSUES.md. |
 | In progress | High | **PrP3 Evaluation**: Run `--eval-postproc` CV to determine best Savgol window + clip config on OOF predictions |
 | Done | High | **PrP3 Evaluate**: Savgol w=31 p=2 best (OOF 14.2123 vs raw 14.2187, −0.0064). All Savgol configs beat raw. Clipping rejected (+0.002). 3/3 wells improved in per-well viz. Defaults updated to w=31 p=2. |
-| Pending | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 to LB |
+| Done | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 → LB **12.239** (−0.008 vs R1 12.247). NEW BEST. Promoted as active baseline. `ref 53428554`. |
 
 ## Open questions
 

@@ -27,7 +27,8 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|
-| Stage | **R1** (18 tabular features), LB 12.247 |
+| Stage | **PrP3** (R1 + Savgol w=31 p=2), LB 12.239 |
+| R1 | 18 tabular features, LB 12.247 |
 | A2a | CV 14.13, LB 12.558 — DWT does not generalise, superseded |
 | Tabular ceiling | LB ~12.2, all A1-A4 experiments flat or degraded |
 
@@ -258,7 +259,7 @@ All top public solutions (Roman Tamrazov sub-9, Ravaghi hill-climbing, Pilkwang 
 
 Goal: Improve CV/LB through per-well post-processing of predicted TVT sequences without changing model architecture or features.
 
-Status: **Evaluated. Savgol w=31 p=2 promoted. TVT clipping rejected.**
+Status: **Promoted. Savgol w=31 p=2 is the new active baseline.** LB 12.239 (−0.008 vs R1 12.247).
 
 Results (OOF 5-fold CV, 3.78M rows, 773 wells):
 

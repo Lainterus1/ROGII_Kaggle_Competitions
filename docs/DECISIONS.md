@@ -449,8 +449,7 @@ The Savgol smoothing code already existed in `src/rogii/smoothing.py` (ADR-015, 
 - Ran `inspect_tvt_range.py` → clip bounds p0.1-p99.9 = [9851.80, 12860.23].
 - Ran `run_train --eval-postproc` → Savgol w=31 p=2 best OOF RMSE 14.2123 vs raw 14.2187 (−0.0064). All Savgol configs beat raw. Clipping degrades (14.2208, +0.002).
 - Ran `visualize_postproc.py` → 3/3 wells improved, raw max jumps 1.6-4.1 ft (noise, not geology), continuity excellent.
-- **Savgol w=31 p=2 PROMOTED as recommended post-processing.**
-- **TVT clipping REJECTED** — 0.2% of data outside [9852, 12860], clipping adds marginal error.
+- **Kaggle LB `53428554`: 12.239** — −0.008 vs R1 (12.247). Improvement confirmed on both CV and LB. OOF→LB gap −1.97 (consistent with R1 −1.94). **Savgol w=31 p=2 is now the active baseline.**
 - Updated defaults: window=31, polyorder=2.
 
 ## ADR-014: B1 Beam Search rejected — typewell alignment adds no net signal
