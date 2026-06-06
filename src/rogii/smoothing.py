@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.signal import savgol_filter
 
 
 def smooth_predictions_per_well(
@@ -39,6 +38,7 @@ def smooth_predictions_per_well(
     result = result.sort_values(["_well_id", "_row_idx"]).reset_index(drop=True)
 
     # Smooth per well
+    from scipy.signal import savgol_filter
     smoothed = np.zeros(len(result), dtype=float)
     for well_id, group in result.groupby("_well_id", sort=False):
         values = group["tvt"].to_numpy(dtype=float)
