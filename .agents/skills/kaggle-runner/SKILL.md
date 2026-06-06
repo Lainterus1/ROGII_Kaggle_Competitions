@@ -13,7 +13,6 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 
 - Public GitHub repo: `https://github.com/Lainterus1/ROGII_Kaggle_Competitions`.
 - Clone command: `git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git`.
-- Current stable offline inference notebook uses `rogii-repo-v2` + `rogii-models-v2`; inspect metadata before changing inputs.
 - Kaggle input root: `/kaggle/input`.
 - Kaggle output root: `/kaggle/working`.
 - Runner files under `scripts/` and `notebooks/`.
@@ -35,89 +34,153 @@ Use this skill when editing Kaggle runner scripts, Kaggle notebook instructions,
 - `notebooks/kernel-metadata.json`
 - `AGENTS.md`
 
-## Procedure (metadata-driven offline inference, ADR-013)
+## Resource mapping
 
-The stable recovery path is R1 offline inference. `00` is updated through Kaggle CLI metadata and uses mounted `rogii-repo-v2` + `rogii-models-v2` Datasets with internet OFF. `01` and `02` remain optional helpers for rebuilding model/repo datasets.
+All procedures use placeholders. The actual values are defined here — a single point to update when names change:
 
-### Current fixed inputs
+| Placeholder          | Current value                              |
+|----------------------|--------------------------------------------|
+| `<inference-kernel>` | `daniilgonchar/00-rogii-inference-r1`      |
+| `<repo-dataset>`     | `daniilgonchar/rogii-repo-v2`              |
+| `<model-dataset>`    | `daniilgonchar/rogii-models-v2`            |
+| `<model-file>`       | `baseline_lgbm.pkl`                         |
+| `<competition>`      | `rogii-wellbore-geology-prediction`         |
+| `<kernel-meta-dir>`  | `notebooks`                                 |
 
-| Resource | Value |
-|---|---|
-| Inference kernel | `daniilgonchar/00-rogii-inference-r1` |
-| Kernel metadata | `notebooks/kernel-metadata.json` |
-| Repo dataset | `daniilgonchar/rogii-repo-v2` |
-| Model dataset | `daniilgonchar/rogii-models-v2` |
-| Model file | `baseline_lgbm.pkl` |
-| Competition source | `rogii-wellbore-geology-prediction` |
-| Internet | OFF for `00` |
+To change a dataset or kernel name, update this table and the corresponding
+`kernel-metadata.json`. All commands below use only the placeholders.
 
-### R1 offline submit flow
+## Offline submit flow (ADR-013)
 
-1. Make code changes locally.
-2. Run `python -m pytest tests`.
-3. Push/update the inference kernel: `kaggle kernels push -p notebooks`.
-4. Check logs: `kaggle kernels logs daniilgonchar/00-rogii-inference-r1`.
-5. Download output to a temp directory, not the repo: `kaggle kernels output daniilgonchar/00-rogii-inference-r1 -p <temp_dir> --file-pattern submission.csv -o`.
-6. Validate output locally when local sample data is available: `python scripts/validate_submission.py --data-dir data --submission <temp_dir>/submission.csv`.
-7. After explicit user approval, submit the kernel version output for this code competition: `kaggle competitions submit -c rogii-wellbore-geology-prediction -k daniilgonchar/00-rogii-inference-r1 -v <version> -f submission.csv -m "<message>"`.
-8. Do not wait indefinitely for the score; record it in `docs/EXPERIMENT_LOG.md` only after the user or CLI reports a public LB score.
+Works for any kernel — R1 fallback or new stage.
 
-### Candidate build workflow
+1. Make code changes locally. Commit and push to GitHub.
+2. If code changes affect `<repo-dataset>`: update it
+   (see "How to update `<repo-dataset>`" below). Otherwise skip.
+3. Update the inference notebook with needed CLI flags.
+4. Run `python -m pytest tests`.
+5. Push kernel: `kaggle kernels push -p <kernel-meta-dir>`.
+6. Wait ~15 seconds for kernel to auto-run, then download output:
+   `kaggle kernels output <inference-kernel> -p <temp_dir> --file-pattern submission.csv -o`.
+7. Validate: `python scripts/validate_submission.py --data-dir data --submission <temp_dir>/submission.csv`.
+8. After explicit user approval, submit:
+   ```
+   kaggle competitions submit -c <competition> -k <inference-kernel> \
+     -v <version> -f submission.csv -m "<message>"
+   ```
+9. Record LB score in `docs/EXPERIMENT_LOG.md` only after available.
 
-Use this flow for A2a or any future model/build. Do not overwrite the R1 recovery kernel or R1 model dataset unless the user explicitly asks.
+## How to update `<repo-dataset>`
+
+The repo dataset contains the full repository as individual files with
+directory structure (e.g. `scripts/run_predict.py`, `src/rogii/smoothing.py`).
+
+**This structure can ONLY be created or updated through Kaggle notebook
+output.** There is no CLI-only way. The Kaggle API (`kaggle datasets version`)
+cannot preserve directory structure — it either skips subdirectories or
+converts them to archives. Both result in a broken dataset.
+
+### Correct way
+
+1. Push code changes to GitHub.
+2. Open `02_kaggle_update_repo.ipynb` on Kaggle (internet ON).
+3. Run it → clones latest code from GitHub.
+4. Save notebook output as a new version of `<repo-dataset>`:
+   Kaggle UI → **Save Version** → **Create Dataset** → select existing `<repo-dataset>`.
+
+### When to update
+
+Only when `src/`, `scripts/`, `configs/` or `requirements.txt` have changed
+AND the change is needed at inference time (new module, new CLI flag,
+new dependency). If only the notebook cell changed, no dataset update needed —
+the notebook is pushed via `kaggle kernels push` separately.
+
+## Stable contract — do NOT modify
+
+These parts of the inference pipeline are fixed and proven. Changing them
+breaks the submit flow:
+
+| Component                     | What                                                                          | Why stable                                                                                     |
+|-------------------------------|-------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| Notebook repo discovery       | `find_repo_root()` — searches for `scripts/run_predict.py` + `src/rogii/`    | Works across all dataset layouts. Do NOT rewrite as zip-extraction, git-clone, or hardcoded paths. |
+| `kernel-metadata.json`        | `dataset_sources: ["<repo-dataset>", "<model-dataset>"]`                      | Points to the stable repo and model. Do NOT change slugs unless the dataset itself was rebuilt. |
+| Notebook command builder      | `cmd = [..., '--data-dir', ..., '--model', ..., '--output', ...]`             | The ONLY place to add CLI flags (e.g. `--savgol-smooth`). Do NOT rewrite the command logic.     |
+| Model file name               | `<model-file>` inside `<model-dataset>`                                        | Inference script and notebook both reference this name.                                         |
+
+## New stage = new kernel
+
+Every new experiment (feature change, post-processing change, model change)
+gets its own Kaggle kernel. Do NOT overwrite an existing kernel even if
+"only the CLI flags changed."
+
+**Why:**
+- Fallback kernel (e.g. R1) remains working for re-submission.
+- Kernel version history stays clean — one purpose per kernel.
+- Debugging is straightforward — logs show exactly what ran.
+
+**How:**
+1. Copy `<kernel-meta-dir>/` to `<kernel-meta-dir>/kernels/<stage-slug>/`.
+2. Update `kernel-metadata.json` in the new directory:
+   - `id`: `<owner>/00-rogii-inference-<stage-slug>`
+   - `title`: `00 - ROGII Inference (<stage-slug>)`
+   - `dataset_sources`: keep `<repo-dataset>` and `<model-dataset>` unchanged.
+3. Edit the notebook: add/change CLI flags as needed. Do NOT change the
+   `find_repo_root()` logic or the command builder structure.
+4. Push: `kaggle kernels push -p <kernel-meta-dir>/kernels/<stage-slug>`.
+5. Follow the standard offline submit flow (validate → submit with `-k <new-kernel>`).
+
+Example: PrP3 (Savgol post-processing) → kernel `00-rogii-inference-prp3`.
+
+## Candidate build workflow
+
+Use this flow for any new model or non-trivial code change. Do not overwrite
+fallback kernel or model dataset unless explicitly asked.
 
 | Artifact | Rule |
 |---|---|
-| Repo dataset | If `src/`, `scripts/`, `configs/`, `requirements.txt` or notebooks changed, update `rogii-repo-v2` before candidate submit. |
-| Model dataset | Use a candidate-specific dataset, for example `rogii-models-a2a`, containing the trained model file. |
-| Dependency dataset | If inference imports packages not available offline, create a candidate-specific wheels/dependency dataset, for example `rogii-wheels-a2a`. |
-| Kernel metadata | Use candidate-specific kernel metadata and kernel slug, for example `00-rogii-inference-a2a`; include repo, model, dependency and competition sources. |
-| Submit command | Submit the candidate kernel version output with `-k`, `-v` and `-f submission.csv`. |
+| Repo dataset | If `src/`, `scripts/`, `configs/` or `requirements.txt` changed AND needed at inference: update `<repo-dataset>` via the 02 notebook (Kaggle, internet ON). |
+| Model dataset | Use a candidate-specific dataset, e.g. `<owner>/rogii-models-<stage-slug>`, containing the trained model file. |
+| Dependency dataset | If inference imports packages not available offline, create a candidate-specific wheels dataset, e.g. `<owner>/rogii-wheels-<stage-slug>`. |
+| Kernel metadata | Use candidate-specific kernel metadata and slug (see "New stage = new kernel" above). |
+| Submit command | Standard kernel-version submit with `-k`, `-v` and `-f submission.csv`. |
 
 Candidate steps:
 
 1. Confirm the candidate feature/model flags and whether inference needs extra packages.
-2. Update `rogii-repo-v2` if code changed since the dataset was last created.
+2. Update `<repo-dataset>` if code changed (see "How to update `<repo-dataset>`").
 3. Train the candidate model and upload it to a candidate-specific model dataset.
-4. If extra packages are needed at inference, package wheels locally or through an internet-ON helper and upload them to a dependency dataset.
-5. Create or update a candidate inference notebook/metadata pair. Keep it thin and call repository scripts; do not move core logic into the notebook.
-6. Add dependency installation in the candidate notebook only from attached offline inputs, for example `python -m pip install --no-index --find-links <wheels_dir> pywavelets`.
-7. Push the candidate kernel with `kaggle kernels push -p <candidate_kernel_dir>`.
-8. Check logs for resolved repo/model/data/dependency paths, row count and non-empty output bytes.
+4. If extra packages are needed at inference, package wheels locally and upload them to a dependency dataset.
+5. Create a candidate kernel folder (see "New stage = new kernel").
+6. Add dependency install in the candidate notebook only from attached offline inputs, e.g. `python -m pip install --no-index --find-links <wheels_dir> pywavelets`.
+7. Push the candidate kernel: `kaggle kernels push -p <candidate_kernel_dir>`.
+8. Check logs for resolved paths, row count and non-empty output.
 9. Download `submission.csv` to a temp directory and validate it.
 10. Submit only after explicit user approval.
-11. Record the public LB score only after the user or CLI reports it.
+11. Record the public LB score only after available.
 
-For A2a specifically, the candidate needs `pywavelets` offline at inference time. A2a should use a separate model dataset and either a separate A2a inference kernel or updated candidate metadata that includes the wheels dataset.
-
-### Why not direct file submit
+## Why not direct file submit
 
 Direct `kaggle competitions submit -f <submission.csv>` can return `400 Bad Request` for this code competition. Use kernel-version submit with `-k`, `-v` and `-f submission.csv`.
 
-### A2a DWT limitation
-
-A2a uses `pywavelets`. Kaggle Submit reruns with internet OFF, so A2a cannot replace R1 in the stable offline submit path until an offline dependency/model packaging solution is created.
-
-### One-time setup (in Kaggle)
+## One-time setup (in Kaggle)
 
 Only needed when rebuilding datasets manually:
 
 | Notebook | Purpose | Internet |
 |---|---|---|
-| `02_kaggle_update_repo` | Clone GitHub repo, then create/update `rogii-repo-v2` Dataset | ON |
-| `01_kaggle_train` | Train stable R1 and create/update `rogii-models-v2` with `baseline_lgbm.pkl` | ON |
-| `00-rogii-inference-r1` | Offline inference and code-competition submit | OFF |
+| `02_kaggle_update_repo` | Clone GitHub repo, then create/update `<repo-dataset>` | ON |
+| `01_kaggle_train` | Train stable model and create/update `<model-dataset>` with `<model-file>` | ON |
+| Inference kernel | Offline inference and code-competition submit | OFF |
 
 1. Keep Kaggle notebooks thin: clone repo, run scripts.
 2. Put reusable logic in `src/rogii/` or `scripts/`, not notebook cells.
 3. Write outputs to `/kaggle/working`.
 4. Do not require GitHub auth, tokens or Kaggle Secrets for cloning the public repo.
 5. Ensure notebook commands match pushed repository files.
-6. `src/rogii/kaggle_runtime.py` owns marker-based path discovery; do not reintroduce hardcoded `/kaggle/input/datasets/*/.../ROGII_Kaggle_Competitions*` paths.
+6. `src/rogii/kaggle_runtime.py` owns marker-based path discovery; do NOT reintroduce hardcoded paths.
 7. `00_kaggle_inference.ipynb` must fail loudly if repo/model/data cannot be found or if `submission.csv` is missing/empty.
 8. Submit only after explicit user approval.
-9. Document any Kaggle-specific runtime limitation.
-10. For new candidates, keep artifact slugs explicit in the completion report: repo dataset, model dataset, dependency dataset, kernel slug and submitted version.
+9. For new candidates, keep artifact slugs explicit in the completion report: repo dataset, model dataset, dependency dataset, kernel slug and submitted version.
 
 ## Documentation updates
 
@@ -140,9 +203,9 @@ Only needed when rebuilding datasets manually:
 - [ ] Notebooks remain thin.
 - [ ] Kaggle paths use `/kaggle/input` and `/kaggle/working`.
 - [ ] `notebooks/kernel-metadata.json` points to the intended kernel, datasets and competition source.
-- [ ] `00_kaggle_inference.ipynb` is offline, loads from `rogii-repo-v2` + `rogii-models-v2`, no training.
+- [ ] Inference notebook is offline, loads from `<repo-dataset>` + `<model-dataset>`, no training.
 - [ ] Kernel output contains non-empty `submission.csv`.
-- [ ] For candidate builds, repo/model/dependency datasets and kernel slug are candidate-specific and do not overwrite R1 fallback.
+- [ ] For candidate builds, repo/model/dependency datasets and kernel slug are candidate-specific and do not overwrite the fallback.
 - [ ] Extra inference dependencies, if any, are installed only from attached offline inputs.
 - [ ] No secrets are required for cloning the public repo.
 - [ ] Runners invoke repository scripts.
@@ -155,3 +218,19 @@ Only needed when rebuilding datasets manually:
 - Do not assume unpublished local code is available on Kaggle.
 - Do not implement scheduled or approval-free Kaggle submission.
 - Do not submit to Kaggle without explicit user approval.
+
+- Do NOT try to update `<repo-dataset>` via `kaggle datasets version` with
+  tar, zip, or flat directories. The CLI cannot preserve directory structure.
+  This WILL break the dataset (corrupted/missing files).
+
+- Do NOT create new dataset slugs to work around upload limitations.
+
+- Do NOT change `<repo-dataset>` or `<model-dataset>` references in
+  `kernel-metadata.json` unless the dataset itself was intentionally
+  rebuilt under a new name.
+
+- Do NOT replace the `find_repo_root()` discovery logic with zip-extraction,
+  git-clone, or hardcoded-path approaches.
+
+- Do NOT overwrite an existing inference kernel for a new experiment.
+  Create a new kernel (see "New stage = new kernel").
