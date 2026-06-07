@@ -1,0 +1,19 @@
+{
+  "id": "daniilgonchar/00-rogii-inference-a4-multiseed",
+  "title": "00 - ROGII Inference (A4 Multi-Seed)",
+  "code_file": "00_kaggle_inference.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "daniilgonchar/rogii-repo-v2",
+    "daniilgonchar/rogii-models-a4-multiseed"
+  ],
+  "competition_sources": [
+    "rogii-wellbore-geology-prediction"
+  ],
+  "kernel_sources": [],
+  "model_sources": []
+}

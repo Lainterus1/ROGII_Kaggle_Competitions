@@ -80,7 +80,10 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | **PrP3 Phase 7**: Document ADR-018 (DECISIONS.md), Stage PrP3 (ROADMAP.md), tasks (TASKS.md), update KNOWN_ISSUES.md. |
 | In progress | High | **PrP3 Evaluation**: Run `--eval-postproc` CV to determine best Savgol window + clip config on OOF predictions |
 | Done | High | **PrP3 Evaluate**: Savgol w=31 p=2 best (OOF 14.2123 vs raw 14.2187, −0.0064). All Savgol configs beat raw. Clipping rejected (+0.002). 3/3 wells improved in per-well viz. Defaults updated to w=31 p=2. |
-| Done | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 → LB **12.239** (−0.008 vs R1 12.247). NEW BEST. Promoted as active baseline. `ref 53428554`. |
+| Done | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 → LB **12.239** (−0.008 vs R1 12.247). NEW BEST. Promoted as active baseline → **Designated as R2**. `ref 53428554`. |
+| Done | High | **PoP2 Phase 1**: Create `src/rogii/z_physics.py` (`apply_z_physics`), `src/rogii/gr_matcher.py` (`apply_dtw_matching`), `src/rogii/postprocess.py` (`apply_postprocess_blend`). 16 tests pass. |
+| Done | High | **PoP2 Phase 2**: Integrate into `scripts/run_predict.py` (`--postprocess-blend`, `--blend-weights` flags). Blend runs between `run_predict()` and Savgol/clip. |
+| Rejected | High | **PoP2 Evaluate**: OOF CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak standalone predictors — blend degrades model. Code behind `--postprocess-blend` flag. Same pattern as all physics/alignment experiments. |
 
 ## Open questions
 

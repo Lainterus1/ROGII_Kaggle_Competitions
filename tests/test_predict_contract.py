@@ -32,7 +32,7 @@ def test_run_predict_uses_saved_feature_column_order(tmp_path: Path) -> None:
     _write_predict_data(tmp_path)
     model = ConstantModel()
 
-    result = run_predict(tmp_path, model, feature_columns=SAFE_NUMERIC_FEATURES)
+    result = run_predict(tmp_path, [model], feature_columns=SAFE_NUMERIC_FEATURES)
 
     assert result["tvt"].tolist() == [123.0]
     assert model.seen_columns == SAFE_NUMERIC_FEATURES
@@ -42,4 +42,4 @@ def test_run_predict_rejects_feature_column_mismatch(tmp_path: Path) -> None:
     _write_predict_data(tmp_path)
 
     with pytest.raises(ValueError, match="Feature columns do not match"):
-        run_predict(tmp_path, ConstantModel(), feature_columns=["MD", "GR"])
+        run_predict(tmp_path, [ConstantModel()], feature_columns=["MD", "GR"])

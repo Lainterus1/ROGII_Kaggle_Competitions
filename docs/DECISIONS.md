@@ -400,6 +400,104 @@ ADR-007 split training and inference into separate notebooks, but code updates s
 
 - None for the current roadmap. Metric and schema are documented in `docs/METRICS.md` and `docs/DATA_MAP.md`.
 
+## ADR-020: Multi-Seed LightGBM Averaging
+
+Date: 2026-06-07
+Status: Accepted
+
+### Context
+
+Stage A4 (Roadmap) planned multi-seed LightGBM averaging: train N models with different random states on same folds/features, average predictions. Expected reduction in CV variance and small mean improvement. Single seed (42) baseline: CV 14.191 ± 0.887.
+
+### Decision
+
+- Implement multi-seed training in `run_train()`: N models per fold, ensemble prediction = mean across seeds.
+- Default seed list: `[42]` (single-seed backward compatible). Multi-seed: `[42, 7, 123]`.
+- CV metrics computed on ensemble predictions (not individual seeds).
+- Final model saves ALL models in a list. `build_model_payload()` stores list with backward compat for single models.
+- `resolve_prediction_contract()` wraps single model in list if payload has `model` (not `models`).
+- CLI: `--seed-list "42,7,123"` or `--n-seeds 3 --seed 42`.
+- `TrainResult.model` → `TrainResult.models: list`. `PredictionContract.model` → `PredictionContract.models: list`.
+
+### Results
+
+3-seed ensemble: CV 14.052 ± 0.868. Mean improvement +0.139 vs single-seed (14.191). Std reduction −0.019 (0.887 → 0.868). Seed correlation is high (~0.95+) — models benefit from averaging but are not independent.
+
+### Consequences
+
+#### Positive
+- +0.14 CV mean improvement with 3x training cost.
+- Backward compatible: old single-model payloads load and predict correctly.
+- `is_multi_seed` flag in `PredictionContract` for downstream awareness.
+
+#### Negative
+- Training time scales linearly with number of seeds (3 seeds = 3x time).
+- Std reduction smaller than theoretical maximum (1/√3 ≈ 0.58x) due to high seed correlation.
+- Model payload size increases linearly with seeds.
+
+#### Follow-up
+- Test on Kaggle LB: expected gain 0.1-0.3 RMSE.
+- 9 new tests in `tests/test_train.py`, `tests/test_model_io.py`, `tests/test_validation_split.py`.
+
+## ADR-021: StratifiedGroupKFold Validation Strategy
+
+Date: 2026-06-07
+Status: Accepted
+
+### Context
+
+Current GroupKFold (by well_id) produces optimistic CV (std 0.89) and LB/CV gap of −2.0 (LB better than CV — test wells easier than train). Matteo Niccoli's StratifiedGroupKFold approach balances folds by:
+1. signed_azimuth_bin (updip/downdip)
+2. median_tvt_quintile (target-stratified)  
+3. spatial_cluster (KMeans X/Y, ~5 clusters)
+
+### Decision
+
+- Implement `build_stratification_labels()` in `validation.py` to compute per-well combined strat labels.
+- Implement `create_cv_splitter()` returning `GroupKFold` or `StratifiedGroupKFold` based on strategy.
+- Integrate into `run_train()` with `cv_strategy` parameter (`"group"` | `"stratified"`).
+- CLI: `--cv-strategy stratified` with optional `--strat-tvt-bins` and `--strat-spatial-clusters`.
+- Merge rare classes (< 5 wells) into nearest neighbor to satisfy StratifiedGroupKFold requirements.
+- Default strat params: n_tvt_bins=4, n_spatial_clusters=5 → 33 classes, min=5 wells.
+
+### Parameter sweep results
+
+| Config | CV Mean | CV Std |
+|---|---|---|
+| GroupKFold (baseline) | 14.191 | 0.887 |
+| Stratified (3,3) | 14.195 | 1.010 |
+| Stratified (5,5) | 13.990 | 1.150 |
+| Stratified (4,5) | 13.806 | 1.522 |
+| Stratified (4,5) + multi-seed [42,7,123] | 13.763 | 1.523 |
+
+### Analysis
+
+- (4,5) is the best single-seed strat config: mean 13.806 (−0.385 vs GroupKFold 14.191).
+- Higher std (1.522) is expected and potentially better for CV/LB correlation — folds are more heterogeneous.
+- (3,3) is too coarse (18 classes) — identical to GroupKFold.
+- (5,5) is in between (38 classes).
+- Multi-seed + strat (4,5) is best overall: 13.763 (−0.428).
+
+### Decision on default strategy
+
+StratifiedGroupKFold (4,5) is NOT set as default — it produces higher std (1.522 vs 0.887) which is possibly more realistic but unvalidated on LB. Default remains GroupKFold. StratifiedGroupKFold is available as an experimental option for CV/LB correlation studies.
+
+### Consequences
+
+#### Positive
+- Stratified CV available for experiments via `--cv-strategy stratified`.
+- (4,5) config produces ~0.4 lower CV mean — potentially better calibrated.
+- All configs validated with 5-fold StratifiedGroupKFold, no class below 5 wells.
+
+#### Negative
+- Higher CV std (1.5 vs 0.9) may not translate to better LB correlation.
+- `median_tvt_quintile` uses train target for binning — standard for StratifiedKFold, but worth noting.
+- Compute cost identical to GroupKFold (strat labels computed once).
+
+#### Follow-up
+- Validate StratifiedGroupKFold vs GroupKFold CV/LB correlation on Kaggle.
+- If Stratified CV → LB gap is smaller, promote to default.
+
 ## ADR-018: Post-Processing Pipeline (PrP3) — Savgol Smoothing + TVT Clipping
 
 Date: 2026-06-06
@@ -449,7 +547,7 @@ The Savgol smoothing code already existed in `src/rogii/smoothing.py` (ADR-015, 
 - Ran `inspect_tvt_range.py` → clip bounds p0.1-p99.9 = [9851.80, 12860.23].
 - Ran `run_train --eval-postproc` → Savgol w=31 p=2 best OOF RMSE 14.2123 vs raw 14.2187 (−0.0064). All Savgol configs beat raw. Clipping degrades (14.2208, +0.002).
 - Ran `visualize_postproc.py` → 3/3 wells improved, raw max jumps 1.6-4.1 ft (noise, not geology), continuity excellent.
-- **Kaggle LB `53428554`: 12.239** — −0.008 vs R1 (12.247). Improvement confirmed on both CV and LB. OOF→LB gap −1.97 (consistent with R1 −1.94). **Savgol w=31 p=2 is now the active baseline.**
+- **Kaggle LB `53428554`: 12.239** — −0.008 vs R1 (12.247). Improvement confirmed on both CV and LB. OOF→LB gap −1.97 (consistent with R1 −1.94). **Savgol w=31 p=2 is now the active baseline — designated as R2 pipeline (R1 model + Savgol).**
 - Updated defaults: window=31, polyorder=2.
 
 ## ADR-014: B1 Beam Search rejected — typewell alignment adds no net signal
@@ -677,3 +775,57 @@ The one novel feature (offset_at_anchor) is a well-level constant — LightGBM c
 - 12 new tests in `tests/test_feature_engineering.py`. 151 total tests pass.
 - CLI flags `--include-z-drift` available in `run_train.py` and `run_predict.py`.
 - Tabular ceiling at CV ~14.1 reconfirmed: 14 feature families tested, 2 promoted, 12 rejected/not promoted.
+
+## ADR-019: PoP2 — Prediction-Time 3-Strategy Blend
+
+Date: 2026-06-07
+Status: Accepted (Rejected post-evaluation)
+
+### Context
+
+PrP2 (Z-Drift Physics as features) was flat (CV 14.20 vs R1 14.19) — the offset is a well-level constant, `implied_tvt` = Z+const and `implied_tvt_resid` = dz_since_ps are linear duplicates. However Scott Weeden v13 and plagiagia v2.8 both use physics/alignment-based TVT estimates as **independent predictors** blended with model output — not as model features. This is a fundamentally different approach: the physics signal, while too weak to help LightGBM split on, may have enough independent accuracy to improve blended output via ensemble averaging.
+
+### Decision
+
+- Implement 3-strategy prediction-time blend: **model + Z-physics + DTW GR matching**.
+- Blend strategy: **median** by default. Weighted average as optional CLI parameter.
+- Z-physics: `TVT_pred = Z_row + (last_tvt_input − Z_at_PS)` — flat formation assumption.
+- DTW GR matching: for each row, take GR window ±25 points, slide across typewell between `[anchor − 300, anchor + 300]`, find TVT with minimum SAD. Uses `numpy.lib.stride_tricks.sliding_window_view` for vectorized computation.
+- Order: blend → Savgol/clip. Savgol smooths the blended output.
+- Missing typewell: fall back to 2-strategy blend (model + Z-physics).
+- No model retraining: all strategies are prediction-time only.
+
+### Alternatives considered
+
+- Z-physics + DTW as **features** for model. Rejected — PrP2 already showed Z-drift features flat (CV 14.20). DTW features (A3a) also flat (CV 14.63). The signal is too weak for tree splitting but may still help in an ensemble average.
+- Beam search + particle filter (plagiagia v2.8). Deferred — more complex, additional dependencies.
+- Weighted average only. Rejected as default — median is more robust, especially when one strategy produces an outlier.
+
+### Consequences
+
+#### OOF Evaluation (5-fold GroupKFold, 773 wells, 3.78M rows)
+
+| Strategy | OOF RMSE | vs Model |
+|---|---|---|
+| Model (R1, delta target) | 14.2187 | reference |
+| Z-physics only | 111.29 | +97.07 |
+| DTW matching only | 145.06 | +130.84 |
+| PoP2 Median | 53.94 | +39.72 |
+| Best weighted (0.8/0.1/0.1) | 22.79 | +8.57 |
+
+Z-physics and DTW are 7-10× weaker than the model as standalone predictors. Any blend degrades accuracy — the model has no error pattern that physics/alignment can correct. This is identical to all previous physics/alignment experiments (PrP2 CV 14.20, A3a CV 14.63, B1 CV 14.43).
+
+#### Positive
+
+- Orthogonal feature test — confirmed that physics/alignment as independent predictors is not viable.
+- Code kept behind `--postprocess-blend` flag for future experiments with stronger auxiliary strategies.
+
+#### Negative
+
+- No improvement. Tabular ceiling at CV ~14.2 reconfirmed.
+- DTW matching is computationally expensive for OOF evaluation (773 wells).
+
+#### Follow-up
+
+- Rejected. No Kaggle submission.
+- Code preserved: `src/rogii/z_physics.py`, `src/rogii/gr_matcher.py`, `src/rogii/postprocess.py`, `scripts/eval_pop2_oof.py`, `tests/test_postprocess.py`.

@@ -11,11 +11,12 @@ FEATURE_FLAG_KEYS = ("include_tvt_input", "include_geometry", "include_gr", "inc
 class PredictionContract:
     """Resolved model and feature contract used at prediction time."""
 
-    model: Any
+    models: list
     residual_target: bool
     baseline_method: str
     feature_flags: dict[str, bool]
     feature_columns: list[str] | None
+    is_multi_seed: bool = False
 
 
 def make_feature_flags(
@@ -52,15 +53,16 @@ def make_feature_flags(
 
 def build_model_payload(
     *,
-    model: Any,
+    models: list,
     feature_columns: list[str],
     residual_target: bool,
     baseline_method: str = "flat",
     feature_flags: dict[str, bool] | None = None,
     model_type: str = "lightgbm",
     run_name: str | None = None,
-    seed: int | None = None,
+    seed_list: list[int] | None = None,
     n_splits: int | None = None,
+    cv_strategy: str | None = None,
     cv_rmse_mean: float | None = None,
     cv_rmse_std: float | None = None,
     cv_rmse_folds: list[float] | None = None,
@@ -77,15 +79,16 @@ def build_model_payload(
     flags = make_feature_flags(**{key: feature_flags.get(key, False) for key in FEATURE_FLAG_KEYS})
     payload: dict[str, Any] = {
         "payload_version": 2,
-        "model": model,
+        "model": models if len(models) > 1 else models[0],
         "model_type": model_type,
         "run_name": run_name,
         "feature_columns": list(feature_columns),
         "feature_flags": flags,
         "residual_target": bool(residual_target),
         "baseline_method": str(baseline_method),
-        "seed": seed,
+        "seed_list": seed_list or [],
         "n_splits": n_splits,
+        "cv_strategy": cv_strategy,
         "cv_rmse_mean": cv_rmse_mean,
         "cv_rmse_std": cv_rmse_std,
         "cv_rmse_folds": cv_rmse_folds,
@@ -125,14 +128,22 @@ def resolve_prediction_contract(
     cli_flags = make_feature_flags(**(cli_feature_flags or {}))
     if not isinstance(payload, dict):
         return PredictionContract(
-            model=payload,
+            models=[payload],
             residual_target=bool(cli_residual_target),
             baseline_method=str(cli_baseline_method),
             feature_flags=cli_flags,
             feature_columns=None,
+            is_multi_seed=False,
         )
 
-    model = payload["model"]
+    raw_model = payload["model"]
+    if isinstance(raw_model, list):
+        models = raw_model
+        is_multi_seed = len(models) > 1
+    else:
+        models = [raw_model]
+        is_multi_seed = False
+
     has_v2_contract = "feature_flags" in payload or "feature_columns" in payload
     payload_flags = _payload_feature_flags(payload)
     residual_target = bool(payload.get("residual_target", False))
@@ -148,7 +159,6 @@ def resolve_prediction_contract(
                 f"refusing override to '{cli_baseline_method}'"
             )
     else:
-        # Legacy dict payloads did not store include_tvt_input, so allow CLI flags to fill missing metadata.
         payload_flags = {key: payload_flags[key] or cli_flags[key] for key in FEATURE_FLAG_KEYS}
         residual_target = residual_target or bool(cli_residual_target)
         if cli_baseline_method != "flat":
@@ -159,11 +169,12 @@ def resolve_prediction_contract(
         feature_columns = list(feature_columns)
 
     return PredictionContract(
-        model=model,
+        models=models,
         residual_target=residual_target,
         baseline_method=baseline_method,
         feature_flags=payload_flags,
         feature_columns=feature_columns,
+        is_multi_seed=is_multi_seed,
     )
 
 

@@ -18,7 +18,15 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--config", help="Optional YAML run config")
     parser.add_argument("--data-dir", default="data", help="Competition data directory")
     parser.add_argument("--n-splits", type=int, help="Number of GroupKFold splits")
-    parser.add_argument("--seed", type=int, help="Random seed")
+    parser.add_argument("--seed", type=int, default=None, help="Single random seed (use --seed-list for multi-seed)")
+    parser.add_argument("--n-seeds", type=int, default=None, help="Number of seeds for multi-seed averaging (uses --seed as base)")
+    parser.add_argument("--seed-list", type=str, default=None, help="Comma-separated list of seeds, e.g. '42,7,123'")
+    parser.add_argument("--cv-strategy", default=None, choices=["group", "stratified"],
+                        help="CV strategy: group (GroupKFold) or stratified (StratifiedGroupKFold)")
+    parser.add_argument("--strat-tvt-bins", type=int, default=None,
+                        help="Number of TVT bins for stratified CV (default 4)")
+    parser.add_argument("--strat-spatial-clusters", type=int, default=None,
+                        help="Number of spatial clusters for stratified CV (default 5)")
     parser.add_argument("--output-model", help="Path for saved model")
     parser.add_argument("--include-tvt-input", action="store_true", help="Include last-known TVT_input as a feature")
     parser.add_argument("--include-geometry", action="store_true", help="Include geometry features relative to Prediction Start")
@@ -61,13 +69,30 @@ def main() -> None:
     artifact_config = _section(config, "artifacts")
 
     n_splits = args.n_splits or int(validation_config.get("n_splits", 5))
-    seed = args.seed or int(run_config.get("seed", 42))
+
+    # Resolve seed list
+    if args.seed_list:
+        seed_list = [int(s.strip()) for s in args.seed_list.split(",")]
+    elif args.n_seeds:
+        base = args.seed or int(run_config.get("seed", 42))
+        seed_list = [base + i * 1000 for i in range(args.n_seeds)]
+    else:
+        config_seed_list = run_config.get("seed_list")
+        if config_seed_list and isinstance(config_seed_list, list):
+            seed_list = [int(s) for s in config_seed_list]
+        else:
+            seed = args.seed or int(run_config.get("seed", 42))
+            seed_list = [seed]
+
+    cv_strategy = args.cv_strategy or validation_config.get("strategy", "group")
+    strat_tvt_bins = args.strat_tvt_bins or int(validation_config.get("strat_tvt_bins", 4))
+    strat_spatial_clusters = args.strat_spatial_clusters or int(validation_config.get("strat_spatial_clusters", 5))
+
     output_model = args.output_model or artifact_config.get("model_path", "models/baseline_lgbm.pkl")
     model_params = model_config.get("params", {})
     if not isinstance(model_params, dict):
         raise ValueError("Config section model.params must be a mapping")
     model_params = dict(model_params)
-    model_params["random_state"] = seed
 
     include_tvt_input = _bool_setting(args.include_tvt_input, feature_config, "include_tvt_input")
     include_geometry = _bool_setting(args.include_geometry, feature_config, "include_geometry")
@@ -90,7 +115,10 @@ def main() -> None:
     result = run_train(
         data_dir=args.data_dir,
         n_splits=n_splits,
-        seed=seed,
+        seed_list=seed_list,
+        cv_strategy=cv_strategy,
+        strat_tvt_bins=strat_tvt_bins,
+        strat_spatial_clusters=strat_spatial_clusters,
         model_params=model_params,
         include_tvt_input=include_tvt_input,
         include_geometry=include_geometry,
@@ -123,15 +151,16 @@ def main() -> None:
         include_z_drift=include_z_drift,
     )
     payload = build_model_payload(
-        model=result.model,
+        models=result.models,
         feature_columns=result.feature_columns,
         residual_target=result.residual_target,
         baseline_method=result.baseline_method,
         feature_flags=feature_flags,
         model_type=str(model_config.get("type", "lightgbm")),
         run_name=run_config.get("name"),
-        seed=seed,
+        seed_list=result.seed_list,
         n_splits=n_splits,
+        cv_strategy=result.cv_strategy,
         cv_rmse_mean=result.cv_rmse_mean,
         cv_rmse_std=result.cv_rmse_std,
         cv_rmse_folds=result.cv_rmse_folds,
@@ -145,6 +174,8 @@ def main() -> None:
     with open(output_model, "wb") as f:
         pickle.dump(payload, f)
 
+    print(f"CV strategy: {result.cv_strategy}")
+    print(f"Seeds ({len(result.seed_list)}): {result.seed_list}")
     print(f"Target mode: {'residual (delta)' if result.residual_target else 'direct (TVT)'}")
     print(f"Feature columns ({len(result.feature_columns)}): {result.feature_columns}")
     print(f"CV RMSE (mean ± std): {result.cv_rmse_mean:.6f} ± {result.cv_rmse_std:.6f}")

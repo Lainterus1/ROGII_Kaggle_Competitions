@@ -1,8 +1,8 @@
 run:
-  name: r1_lgbm_optimized
+  name: a4_multiseed_lgbm
   type: model_baseline
   seed: 42
-  seed_list: [42]  # single-seed default; override with [42, 7, 123] for multi-seed
+  seed_list: [42, 7, 123]
   environment: local
 
 paths:
@@ -47,10 +47,10 @@ features:
   residual_target: true
 
 validation:
-  strategy: group_kfold
+  strategy: group
   n_splits: 5
   group_column: well_id
 
 artifacts:
-  model_path: models/r1_lgbm.pkl
+  model_path: models/a4_multiseed.pkl
   submission_path: outputs/submission.csv

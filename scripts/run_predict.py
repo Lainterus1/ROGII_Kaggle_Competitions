@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rogii.data_loading import sample_submission_path
 from rogii.model_io import make_feature_flags, resolve_prediction_contract
+from rogii.postprocess import apply_postprocess_blend, parse_blend_weights
 from rogii.predict import run_predict
 from rogii.smoothing import apply_postprocessing
 from rogii.submission import validate_submission
@@ -39,6 +40,10 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--savgol-polyorder", type=int, default=2, help="Savgol filter polynomial order (default 2)")
     parser.add_argument("--tvt-clip", action="store_true",
                         help="Apply TVT clipping (uses bounds from model payload if available)")
+    parser.add_argument("--postprocess-blend", action="store_true",
+                        help="Apply 3-strategy blend: model + Z-physics + DTW GR matching")
+    parser.add_argument("--blend-weights", type=str, default=None,
+                        help="Blend weights for model,z_physics,dtw (e.g. '0.5,0.25,0.25'). Default: median")
     return parser
 
 
@@ -73,7 +78,7 @@ def main() -> None:
 
     submission = run_predict(
         args.data_dir,
-        contract.model,
+        contract.models,
         include_tvt_input=flags["include_tvt_input"],
         include_geometry=flags["include_geometry"],
         include_gr=flags["include_gr"],
@@ -93,6 +98,10 @@ def main() -> None:
 
     apply_savgol = args.savgol_smooth
     apply_clip = args.tvt_clip
+    blend_weights = parse_blend_weights(args.blend_weights)
+
+    if args.postprocess_blend:
+        submission = apply_postprocess_blend(submission, args.data_dir, weights=blend_weights)
 
     # Auto-detect clip bounds from payload
     clip_lower: float | None = None
@@ -128,6 +137,13 @@ def main() -> None:
         print(f"TVT clipping: ON [{clip_lower:.2f}, {clip_upper:.2f}]")
     else:
         print("TVT clipping: OFF")
+    if args.postprocess_blend:
+        if blend_weights is not None:
+            print(f"3-strategy blend: ON (weights: model={blend_weights[0]:.2f}, z_physics={blend_weights[1]:.2f}, dtw={blend_weights[2]:.2f})")
+        else:
+            print("3-strategy blend: ON (median)")
+    else:
+        print("3-strategy blend: OFF")
     print(f"Submission rows: {result.rows}")
     print(f"Wrote submission: {output}")
 

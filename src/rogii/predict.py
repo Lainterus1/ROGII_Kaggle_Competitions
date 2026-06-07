@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMRegressor
 
 from rogii.baseline import compute_baseline
 from rogii.data_loading import list_well_ids, read_horizontal_well, read_sample_submission, read_typewell
@@ -15,7 +14,7 @@ from rogii.models import parse_submission_id
 
 def run_predict(
     data_dir: str | Path,
-    model: LGBMRegressor,
+    models: list,
     include_tvt_input: bool = False,
     include_geometry: bool = False,
     include_gr: bool = False,
@@ -40,7 +39,7 @@ def run_predict(
 
     if include_spatial or include_formation_plane:
         return _run_predict_with_spatial(
-            data_dir, model, sample,
+            data_dir, models, sample,
             include_tvt_input=use_tvt_feature,
             include_geometry=include_geometry,
             include_gr=include_gr,
@@ -90,7 +89,7 @@ def run_predict(
         if row_index < 0 or row_index >= len(feats):
             raise IndexError(f"Submission row index out of bounds for {submission_id}")
         row_feats = feats.iloc[row_index : row_index + 1]
-        pred = float(model.predict(row_feats)[0])
+        pred = float(np.mean([m.predict(row_feats)[0] for m in models]))
         if residual_target:
             pred = baseline_cache[well_id][row_index] + pred
         if not np.isfinite(pred):
@@ -102,7 +101,7 @@ def run_predict(
 
 def _run_predict_with_spatial(
     data_dir: str | Path,
-    model: LGBMRegressor,
+    models: list,
     sample: pd.DataFrame,
     include_tvt_input: bool = False,
     include_geometry: bool = False,
@@ -175,7 +174,7 @@ def _run_predict_with_spatial(
         if row_index < 0 or row_index >= len(feats):
             raise IndexError(f"Submission row index out of bounds for {submission_id}")
         row_feats = feats.iloc[row_index : row_index + 1]
-        pred = float(model.predict(row_feats)[0])
+        pred = float(np.mean([m.predict(row_feats)[0] for m in models]))
         if residual_target:
             pred = baseline_cache[well_id][row_index] + pred
         if not np.isfinite(pred):

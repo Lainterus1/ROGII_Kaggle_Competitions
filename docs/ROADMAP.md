@@ -26,11 +26,10 @@ Post-baseline improvement stages, priorities, promotion gates, high-risk deferre
 Current best clean baseline:
 
 | Item | Value |
-|---|---|
-| Stage | **PrP3** (R1 + Savgol w=31 p=2), LB 12.239 |
-| R1 | 18 tabular features, LB 12.247 |
-| A2a | CV 14.13, LB 12.558 — DWT does not generalise, superseded |
-| Tabular ceiling | LB ~12.2, all A1-A4 experiments flat or degraded |
+|---|---|---|
+| Stage | **R2** (R1 model + Savgol w=31 p=2), OOF 14.21, LB 12.239 |
+| R1 | 18 tabular features, OOF 14.22, LB 12.247 — model-only, no post-processing |
+| Tabular ceiling | LB ~12.2, all A1-B3 experiments flat or degraded |
 
 Active development: **Tabular ceiling confirmed** — all feature families exhausted. Next: architecture diversity (CNN, ensemble).
 
@@ -51,7 +50,7 @@ Active development: **Tabular ceiling confirmed** — all feature families exhau
 
 1. Run `python -m pytest tests`.
 2. Run full 5-fold GroupKFold CV for the candidate stage.
-3. Compare against R1 optimized and the latest promoted stage.
+3. Compare against R2 and the latest promoted stage.
 4. Run leakage review for every new feature family or target transform.
 5. Generate a candidate submission only in an ignored runtime path such as `outputs/submission.csv` or `/kaggle/working/submission.csv`.
 6. Run `python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv` locally or the Kaggle-equivalent command in the notebook.
@@ -70,7 +69,7 @@ Status: Done. Train can load `configs/baseline_lgbm.yaml`; saved model payloads 
 Scope:
 
 - Replace old pending roadmap items with stages A1-A4.
-- Keep R1 optimized as the active baseline and Stage 4 as the historical frozen baseline.
+- Keep R2 as the active baseline and Stage 4 as the historical frozen baseline.
 - Ensure model payloads carry enough metadata to reproduce prediction: feature flags, target mode, feature columns and run name.
 - Sync README and config examples with the currently supported CLI commands.
 - Keep Kaggle workflow: training notebook (`01_kaggle_train.ipynb`) saves R1 model to `rogii-models-v2`; inference notebook (`00_kaggle_inference.ipynb`) loads `rogii-repo-v2` + `rogii-models-v2` and generates a validated submission (ADR-007, ADR-013).
@@ -259,7 +258,7 @@ All top public solutions (Roman Tamrazov sub-9, Ravaghi hill-climbing, Pilkwang 
 
 Goal: Improve CV/LB through per-well post-processing of predicted TVT sequences without changing model architecture or features.
 
-Status: **Promoted. Savgol w=31 p=2 is the new active baseline.** LB 12.239 (−0.008 vs R1 12.247).
+Status: **Promoted → Designated as R2 (canonical active baseline).** Savgol w=31 p=2. LB 12.239 (−0.008 vs R1 12.247).
 
 Results (OOF 5-fold CV, 3.78M rows, 773 wells):
 
@@ -325,6 +324,51 @@ Promotion gate:
 - If CV improves: update active baseline config and LB-submit.
 - If CV flat: keep code as optional pipeline, do not change active baseline.
 
+## Stage PoP2: Prediction-Time 3-Strategy Blend (Model + Z-Physics + DTW GR Matching)
+
+Goal: Blend raw model predictions with two physics/alignment-based TVT estimates at prediction time, without model retraining.
+
+Status: **Rejected. OOF CV 53.94 (+39.72 vs Model 14.22). Both Z-physics (111.29) and DTW (145.06) are weak standalone predictors — blending them degrades the accurate model predictions.**
+
+### Why
+
+All top public solutions use multi-strategy blending (model + beam + particle filter in plagiagia v2.8; model + Z-physics + DTW in Scott Weeden v13). Our Z-Drift features as model input were flat (PrP2, CV 14.20). This stage applied Z-physics and DTW-GR matching as **independent predictors** and blended them with the model (median) — a fundamentally different information pathway from feature-engineering approaches.
+
+### OOF Results (5-fold GroupKFold, 773 wells, 3.78M rows)
+
+| Strategy | OOF RMSE | vs Model |
+|---|---|---|
+| **Model (R1, delta target)** | **14.2187** | reference |
+| Z-physics only | 111.29 | +97.07 |
+| DTW matching only | 145.06 | +130.84 |
+| PoP2 Median (model+z+dtw) | 53.94 | +39.72 |
+| Best weighted (0.8/0.1/0.1) | 22.79 | +8.57 |
+
+### Root Cause
+
+Z-physics (`TVT_z = Z + offset`) and DTW (sliding-window GR SAD against typewell) are too weak as standalone TVT predictors. While they correlate with the model (0.98-0.99), their individual RMSE is 7-10× worse than the model. Any blend weight > 0 on them drags the final prediction away from the accurate model output.
+
+This follows the identical pattern as all previous physics/alignment experiments:
+- PrP2 Z-Drift as features: CV 14.20, flat (+0.01)
+- A3a DTW alignment: CV 14.63 (+0.50)
+- B1 Beam Search: CV 14.43 (+0.24)
+- **PoP2 Blend: CV 53.94 (+39.72)**
+
+The model has already extracted all useful signal from spatial coordinates and GR. Physics-based corrections add no new information — they are less accurate approximations of the same signal.
+
+### Decision
+
+**Reject PoP2.** Code kept behind `--postprocess-blend` flag in `scripts/run_predict.py` for future ensemble experiments with stronger auxiliary strategies. Tabular ceiling at CV ~14.2 reconfirmed.
+
+### Scope (preserved)
+
+- `src/rogii/z_physics.py` — `apply_z_physics()`
+- `src/rogii/gr_matcher.py` — `apply_dtw_matching()`
+- `src/rogii/postprocess.py` — `apply_postprocess_blend()`
+- `scripts/run_predict.py` — `--postprocess-blend`, `--blend-weights` flags
+- `scripts/eval_pop2_oof.py` — OOF evaluation script
+- `tests/test_postprocess.py` — 16 tests pass
+
 ## Stop Criteria
 
 | Signal | Action |
@@ -358,3 +402,4 @@ Promotion gate:
 | **Z-Drift Physics (PrP2)** | **Not promoted** | CV 14.20 (flat vs R1 14.19, +0.01). 3 TVT-Z coupling features. Only offset_at_anchor is new signal; implied_tvt = Z+const, implied_tvt_resid = dz_since_ps (r=1.0). Fold inconsistency: fold 2 -0.80, fold 3 +0.62. Code kept behind include_z_drift flag. |
 | **1D CNN sequence model** | **Deferred for A4+** | Architecture diversity, not feature; revisit after tabular ceiling |
 | **Multi-seed LGBM + CatBoost + stacking** | **Deferred for A4+** | Cosmetic ensemble on same features |
+| **PoP2: 3-Strategy Blend** | **Rejected** | CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak predictors — blending degrades model. Code kept behind `--postprocess-blend` flag. |

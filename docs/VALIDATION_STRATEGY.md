@@ -52,11 +52,12 @@ Stage 3 ML validation:
 
 Current active baseline validation:
 
-- Active comparison stage: R1 optimized.
+- Active comparison stage: **R2** (R1 model + Savgol w=31 p=2 post-processing).
 - Strategy: 5-fold `GroupKFold` by `well_id` on post-PS train rows.
 - Target: residual delta `TVT - last_tvt_input`, reconstructed to TVT for submission.
 - Features: 18 features (6 base + 9 geometry + 3 GR), documented in `docs/HOW_IT_WORKS.md`.
-- Result: CV RMSE `~14.19`, public LB RMSE `12.247`.
+- R1 model OOF CV: `~14.22`, R2 pipeline OOF CV: `~14.21`.
+- Public LB: R1 `12.247`, R2 `12.239`.
 
 Planned Stage A2 spatial KNN validation contract:
 
@@ -78,3 +79,4 @@ Required checks:
 ## Open questions
 
 - None for the current roadmap. Default remains 5-fold `GroupKFold` by `well_id`.
+- `StratifiedGroupKFold` (4,5) available as experimental option: `--cv-strategy stratified`. Produces CV mean 13.806 ± 1.522 (vs GroupKFold 14.191 ± 0.887). Higher std may indicate better CV/LB correlation. Not yet promoted to default.

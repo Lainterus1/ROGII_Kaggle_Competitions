@@ -1,13 +1,11 @@
 """Training entry points for the ROGII ML baseline."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
-from sklearn.model_selection import GroupKFold
-
 from rogii.baseline import compute_baseline
 from rogii.data_loading import list_well_ids, read_horizontal_well, read_typewell
 from rogii.features import SAFE_NUMERIC_FEATURES, build_features, last_known_tvt_input_value, post_ps_mask
@@ -27,13 +25,15 @@ class PostprocResult:
 
 @dataclass(frozen=True)
 class TrainResult:
-    model: LGBMRegressor
+    models: list
+    seed_list: list[int]
     cv_rmse_mean: float
     cv_rmse_std: float
     cv_rmse_folds: list[float]
     train_rows: int
     train_wells: int
     feature_columns: list[str]
+    cv_strategy: str = "group"
     residual_target: bool = False
     baseline_method: str = "flat"
     postproc_results: list[PostprocResult] | None = None
@@ -366,7 +366,10 @@ def evaluate_postprocessing(
 def run_train(
     data_dir: str | Path,
     n_splits: int = 5,
-    seed: int = 42,
+    seed_list: list[int] | None = None,
+    cv_strategy: str = "group",
+    strat_tvt_bins: int = 4,
+    strat_spatial_clusters: int = 5,
     model_params: dict | None = None,
     include_tvt_input: bool = False,
     include_geometry: bool = False,
@@ -404,17 +407,35 @@ def run_train(
     if model_params is None:
         model_params = {}
 
-    params: dict = {
+    seeds = seed_list if seed_list else [42]
+
+    base_params: dict = {
         "objective": "regression",
         "learning_rate": 0.05,
         "n_estimators": 1000,
-        "random_state": seed,
         "verbose": -1,
     }
-    params.update(model_params)
+    base_params.update(model_params)
 
-    print(f"[2/3] Training {n_splits}-fold GroupKFold CV on {len(y)} rows ...")
-    cv = GroupKFold(n_splits=n_splits)
+    from rogii.validation import build_stratification_labels, create_cv_splitter
+
+    cv_splitter = create_cv_splitter(cv_strategy, n_splits)
+
+    strat_labels: np.ndarray | None = None
+    if cv_strategy == "stratified":
+        strat_labels, _ = build_stratification_labels(
+            data_dir, well_ids_used,
+            n_tvt_bins=strat_tvt_bins,
+            n_spatial_clusters=strat_spatial_clusters,
+        )
+        # Expand per-well labels to per-row
+        strat_labels_per_row = np.array([strat_labels[g] for g in groups], dtype=int)
+    else:
+        strat_labels_per_row = y
+
+    strategy_label = "StratifiedGroupKFold" if cv_strategy == "stratified" else "GroupKFold"
+    n_seeds = len(seeds)
+    print(f"[2/3] Training {n_splits}-fold {strategy_label} CV ({n_seeds} seed{'s' if n_seeds > 1 else ''}) on {len(y)} rows ...")
     cv_scores: list[float] = []
     oof_rows: list[tuple[str, int, float, float, float]] = []
 
@@ -422,7 +443,7 @@ def run_train(
         from rogii.formation_plane import build_formation_reference
         global_fp_ref = build_formation_reference(data_dir, "train", well_ids_used)
 
-    for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y, groups)):
+    for fold_idx, (train_idx, val_idx) in enumerate(cv_splitter.split(X, strat_labels_per_row, groups)):
         print(f"  Fold {fold_idx + 1}/{n_splits} ...")
         X_tr = X.iloc[train_idx].copy()
         X_val = X.iloc[val_idx].copy()
@@ -445,9 +466,18 @@ def run_train(
             X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_fp.reset_index(drop=True)], axis=1)
             X_val = pd.concat([X_val.reset_index(drop=True), X_val_fp.reset_index(drop=True)], axis=1)
 
-        model = LGBMRegressor(**params)
-        model.fit(X_tr, y_tr)
-        y_pred = model.predict(X_val)
+        fold_seed_preds: list[np.ndarray] = []
+        for seed_i, seed in enumerate(seeds):
+            seed_params = dict(base_params)
+            seed_params["random_state"] = seed
+            model = LGBMRegressor(**seed_params)
+            model.fit(X_tr, y_tr)
+            y_pred_seed = model.predict(X_val)
+            fold_seed_preds.append(y_pred_seed)
+            if n_seeds == 1:
+                print(f"    seed={seed}", end="")
+
+        y_pred = np.mean(fold_seed_preds, axis=0)
         score = rmse(y_val, y_pred)
         cv_scores.append(score)
         print(f"  Fold {fold_idx + 1} RMSE: {score:.6f}")
@@ -462,7 +492,7 @@ def run_train(
                     float(row_baselines[flat_idx]),
                 ))
 
-    print(f"[3/3] Training final model on all data ...")
+    print(f"[3/3] Training {n_seeds} final model{'s' if n_seeds > 1 else ''} on all data ...")
     if include_spatial:
         from rogii.spatial_features import build_pre_ps_reference, build_spatial_knn_features
         ref = build_pre_ps_reference(data_dir, "train", well_ids_used)
@@ -473,8 +503,13 @@ def run_train(
         X_fp_final = _formation_plane_fold_features(X, groups, well_ids_used, global_fp_ref)
         X = pd.concat([X, X_fp_final], axis=1)
 
-    final_model = LGBMRegressor(**params)
-    final_model.fit(X, y)
+    final_models: list = []
+    for seed_i, seed in enumerate(seeds):
+        seed_params = dict(base_params)
+        seed_params["random_state"] = seed
+        model = LGBMRegressor(**seed_params)
+        model.fit(X, y)
+        final_models.append(model)
 
     # Compute clipping bounds from train data
     clip_bounds: tuple[float, float] | None = None
@@ -517,13 +552,15 @@ def run_train(
             print(f"{r.label:<45} {r.raw_rmse:8.4f} {r.postproc_rmse:10.4f} {delta:+8.4f}")
 
     return TrainResult(
-        model=final_model,
+        models=final_models,
+        seed_list=list(seeds),
         cv_rmse_mean=float(np.mean(cv_scores)),
         cv_rmse_std=float(np.std(cv_scores)),
         cv_rmse_folds=cv_scores,
         train_rows=len(y),
         train_wells=len(np.unique(groups)),
         feature_columns=list(X.columns),
+        cv_strategy=cv_strategy,
         residual_target=residual_target,
         baseline_method=baseline_method,
         postproc_results=postproc_results,
