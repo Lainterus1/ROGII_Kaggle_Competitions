@@ -829,3 +829,110 @@ Z-physics and DTW are 7-10× weaker than the model as standalone predictors. Any
 
 - Rejected. No Kaggle submission.
 - Code preserved: `src/rogii/z_physics.py`, `src/rogii/gr_matcher.py`, `src/rogii/postprocess.py`, `scripts/eval_pop2_oof.py`, `tests/test_postprocess.py`.
+
+## ADR-022: Kaggle dataset upload via kagglehub (replaces notebook-only approach)
+
+Date: 2026-06-07
+Status: Accepted
+
+### Context
+
+ADR-008 specified that repo datasets can ONLY be created through Kaggle notebook output (02 → Save Version → Create Dataset). This required Kaggle UI interaction for every code change. The agent discovered that `kagglehub.dataset_upload()` preserves directory structure — the "creating a zip archive" message during upload is misleading; Kaggle extracts files server-side and paths are preserved.
+
+The Kaggle CLI (`kaggle datasets version -p`) SKIPS subdirectories and breaks multi-file datasets. Confirmed by breaking `rogii-repo-v2`.
+
+### Decision
+
+- `kagglehub.dataset_upload(handle, local_dataset_dir)` is the primary method for creating repo datasets. Fully automated, no Kaggle UI needed.
+- Always verify with `kaggle datasets files <dataset>` after creation — files must show full paths.
+- For each candidate, create a NEW repo dataset (`rogii-repo-<slug>`). Never overwrite an existing one.
+- Model datasets (single binary file) can use `kaggle datasets create -p <dir>` since no directories are involved.
+
+### Consequences
+
+#### Positive
+
+- Zero Kaggle UI steps needed for repo dataset creation.
+- Each candidate is fully self-contained (code + model datasets).
+- R1 fallback protected — its datasets are never touched by new candidates.
+- Errors caught early: always verify dataset file listing after creation.
+
+#### Negative
+
+- More Kaggle datasets to manage (one repo dataset per candidate).
+- `kagglehub` must be installed locally (`pip install kagglehub`).
+
+#### Follow-up
+
+- Remove all references to manual notebook-based dataset creation from skills and docs.
+- Add `kagglehub` to project dependencies if not already present.
+
+## ADR-023: Strategic shift from feature engineering to architecture diversity
+
+Date: 2026-06-07
+Status: Accepted
+
+### Context
+
+All feature engineering experiments (Stages A1-A3, B1-B3, PrP2) resulted in flat or degraded CV vs R1 (14.19). Tabular ceiling at CV ~14.1 confirmed. However, top leader solutions achieve LB 5.99–7.5 — a 4.7–6.2 point gap vs R3 (12.177). Analysis of leader solutions and public notebooks was conducted to understand the gap.
+
+### Analysis of Leader Methods (without participant names)
+
+Methods observed across top 20 leaderboard solutions:
+
+1. **Sequence models:** TCN (Temporal Convolutional Network) with causal convolutions on raw X,Y,Z,GR,MD + diff/lag/roll features. Architecture: [64,128,256] channels, kernel=3, GroupKFold 5, GPU training with AMP. Target normalization via StandardScaler.
+2. **Beam Search + Particle Filter as independent predictors:** NOT as tabular features for gradient boosting. Blend ratio: `0.5×ML + 0.25×Beam + 0.25×PF`. Numba JIT beam search, 250-particle filter with GR-likelihood updates.
+3. **Multi-strategy ensemble:** 3+ independent prediction strategies blended via Ridge stacking or weighted averaging. Strategies: ML model + deep learning + physics-based alignment.
+4. **Seq-CNN with geology prediction:** PyTorch CNN + geology classifier (leave-one-well-out CV) + TVT projection methods (js_anchor, linear, gr_adjusted).
+5. **Typewell matching:** merge_asof on Z↔TVT for per-row typewell features.
+6. **Post-processing:** Z ± margin clipping, TVT range clipping, Savgol smoothing.
+
+### Our Gap Analysis
+
+| Capability | Leaders | We have | Action |
+|---|---|---|---|
+| Sequence model (TCN/CNN) | Yes | No | A5a |
+| Physics predictors (Beam/PF) | Yes, as predictors | Yes, as features → degraded | A5b (repurpose) |
+| Multi-strategy ensemble | Yes (3+ strategies) | Multi-seed LGBM only | A5c |
+| OOF infrastructure | Implicit | In-memory only | A5.0 |
+
+### Root Cause of B1 Failure
+
+Stage B1 (Beam Search as LightGBM features) degraded CV to 14.43 because beam-derived features (`beam_std` was #2 by importance at 6.2%) cannibalized X/Y/Z spatial importance (X: 17%→5.6%, Y: 15%→5.5%, Z: 12.5%→6.0%) — zero-sum redistribution without net gain. LightGBM cannot combine beam alignment signal with spatial coordinates; it picks one. Leader approach avoids this by treating beam as a separate predictor blended at the output level, not the feature level.
+
+### Decision
+
+- **Abandon feature-engineering-first roadmap.** Stages A1-B3 confirmed diminishing returns on tabular features for LightGBM.
+- **Adopt architecture-diversity roadmap (Stage A5):** OOF infrastructure → TCN sequence model → standalone physics predictors → multi-strategy ensemble → optional HPO.
+- **Dependency `torch` is approved** for GPU sequence model training. GPU available locally.
+- **Dependency `catboost` deferred to A6** — lower priority than TCN for architecture diversity.
+- **No `weight` column** in competition data (DATA_MAP confirms 8 columns: MD,X,Y,Z,ANCC,ASTNU,ASTNL,EGFDU,EGFDL,BUDA,TVT,GR,TVT_input) — plain MSE loss, not weighted.
+
+### Consequences
+
+#### Positive
+
+- Addresses the actual gap with leader solutions (architecture, not features).
+- Reuses existing beam search code (`src/rogii/beam_search.py`) for A5b predictor mode.
+- GPU enables TCN training at leader-comparable speed.
+- Each stage independently verifiable via OOF infrastructure.
+
+#### Negative
+
+- `torch` is a heavy dependency (~800 MB). Kaggle GPU kernels support it natively.
+- TCN training time: 1-2 hours for 5-fold CV on full data vs ~2 min for LightGBM.
+- OOF infrastructure adds complexity to the training pipeline.
+
+#### Follow-up
+
+- Implement A5.0 (OOF infrastructure) first as gate for A5a-A5c.
+- Implement A5a (TCN) as highest priority.
+- Re-evaluate after TCN CV result: if CV < 12, continue A5b-A5c; if CV flat, re-analyze.
+
+### Rejected alternatives
+
+- **More feature engineering** — 10+ experiments all flat or degraded. Diminishing returns proven.
+- **CatBoost first** — Ordered Boosting addresses grouped data but doesn't add sequential signal. TCN has larger potential upside.
+- **XGBoost first** — same architecture family as LightGBM (tree-based). No architecture diversity.
+- **Foundation models (TimesFM, PatchTST)** — promising in literature but heavy dependencies, unproven on this exact problem, higher risk than TCN.
+- **Soft-DTW differentiable loss** — complex, requires tslearn, no leader evidence of necessity.

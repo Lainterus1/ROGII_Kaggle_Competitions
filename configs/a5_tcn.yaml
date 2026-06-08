@@ -1,0 +1,36 @@
+run:
+  name: a5_tcn_control
+  type: model_baseline
+  seed: 42
+  environment: local
+
+paths:
+  config: configs/paths.local.yaml.example
+
+model:
+  type: tcn
+  params:
+    window_size: 64
+    num_channels: [32, 64, 128]
+    kernel_size: 5
+    epochs: 10
+    batch_size: 4096
+    learning_rate: 0.0003
+    weight_decay: 0.0001
+    dropout: 0.1
+    patience: 4
+    device: cuda
+    stride: 4
+    num_workers: 0
+
+features:
+  residual_target: true
+
+validation:
+  strategy: group
+  n_splits: 5
+  group_column: well_id
+
+artifacts:
+  model_path: models/a5_tcn.pkl
+  submission_path: outputs/a5_tcn_submission.csv

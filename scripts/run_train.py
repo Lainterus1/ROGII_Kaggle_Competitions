@@ -45,6 +45,27 @@ def parse_args() -> ArgumentParser:
                         help="Baseline construction method for residual target")
     parser.add_argument("--eval-postproc", action="store_true",
                         help="Evaluate Savgol smoothing + TVT clipping on OOF CV predictions")
+    parser.add_argument("--save-oof", action="store_true",
+                        help="Save out-of-fold CV predictions to outputs/oof/")
+    parser.add_argument("--model-type", default=None, choices=["lightgbm", "tcn"],
+                        help="Model type: lightgbm (default) or tcn")
+    parser.add_argument("--tcn-channels", default=None, type=str,
+                        help="TCN channel sizes, comma-separated (e.g. '64,128,256')")
+    parser.add_argument("--tcn-window", type=int, default=None, help="TCN sliding window size")
+    parser.add_argument("--tcn-epochs", type=int, default=None, help="TCN max epochs")
+    parser.add_argument("--tcn-batch-size", type=int, default=None, help="TCN batch size")
+    parser.add_argument("--tcn-lr", type=float, default=None, help="TCN learning rate")
+    parser.add_argument("--tcn-weight-decay", type=float, default=None, help="TCN weight decay")
+    parser.add_argument("--tcn-kernel-size", "--tcn-kernel", dest="tcn_kernel_size", type=int, default=None,
+                        help="TCN convolution kernel size")
+    parser.add_argument("--tcn-dropout", type=float, default=None, help="TCN dropout")
+    parser.add_argument("--tcn-patience", type=int, default=None, help="TCN early stopping patience")
+    parser.add_argument("--tcn-device", default=None, choices=["cuda", "cpu"],
+                        help="TCN device (cuda or cpu)")
+    parser.add_argument("--tcn-stride", type=int, default=None,
+                        help="Sliding window stride (default 1, increase for speed)")
+    parser.add_argument("--tcn-workers", type=int, default=None,
+                        help="DataLoader num_workers (default 2)")
     return parser
 
 
@@ -112,65 +133,148 @@ def main() -> None:
     model_dir = Path(output_model).parent
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    result = run_train(
-        data_dir=args.data_dir,
-        n_splits=n_splits,
-        seed_list=seed_list,
-        cv_strategy=cv_strategy,
-        strat_tvt_bins=strat_tvt_bins,
-        strat_spatial_clusters=strat_spatial_clusters,
-        model_params=model_params,
-        include_tvt_input=include_tvt_input,
-        include_geometry=include_geometry,
-        include_gr=include_gr,
-        include_gr_dwt=include_gr_dwt,
-        include_trajectory=include_trajectory,
-        include_typewell=include_typewell,
-        include_spatial=include_spatial,
-        include_dtw=include_dtw,
-        include_geology=include_geology,
-        include_beam=include_beam,
-        include_formation_plane=include_formation_plane,
-        include_z_drift=include_z_drift,
-        residual_target=residual_target,
-        baseline_method=baseline_method,
-        eval_postproc=args.eval_postproc,
-    )
+    model_type = args.model_type or str(model_config.get("type", "lightgbm"))
+    seed = args.seed or int(run_config.get("seed", 42))
 
-    feature_flags = make_feature_flags(
-        include_tvt_input=include_tvt_input and not residual_target,
-        include_geometry=include_geometry,
-        include_gr=include_gr,
-        include_trajectory=include_trajectory,
-        include_typewell=include_typewell,
-        include_gr_dwt=include_gr_dwt,
-        include_spatial=include_spatial,
-        include_dtw=include_dtw,
-        include_geology=include_geology,
-        include_beam=include_beam,
-        include_z_drift=include_z_drift,
-    )
-    payload = build_model_payload(
-        models=result.models,
-        feature_columns=result.feature_columns,
-        residual_target=result.residual_target,
-        baseline_method=result.baseline_method,
-        feature_flags=feature_flags,
-        model_type=str(model_config.get("type", "lightgbm")),
-        run_name=run_config.get("name"),
-        seed_list=result.seed_list,
-        n_splits=n_splits,
-        cv_strategy=result.cv_strategy,
-        cv_rmse_mean=result.cv_rmse_mean,
-        cv_rmse_std=result.cv_rmse_std,
-        cv_rmse_folds=result.cv_rmse_folds,
-        train_rows=result.train_rows,
-        train_wells=result.train_wells,
-        config_path=args.config,
-        model_params=model_params,
-        clip_lower=result.clip_bounds[0] if result.clip_bounds else None,
-        clip_upper=result.clip_bounds[1] if result.clip_bounds else None,
-    )
+    if model_type == "tcn":
+        from rogii.train import train_tcn
+
+        tcn_params = model_config.get("params", {})
+        if not isinstance(tcn_params, dict):
+            tcn_params = {}
+        tcn_params = dict(tcn_params)
+
+        tcn_channels_str = args.tcn_channels
+        if tcn_channels_str:
+            tcn_channels = tuple(int(x.strip()) for x in tcn_channels_str.split(","))
+        else:
+            tcn_channels = tuple(tcn_params.get("num_channels", [64, 128, 256, 128]))
+
+        window_size = args.tcn_window or int(tcn_params.get("window_size", 64))
+        epochs = args.tcn_epochs or int(tcn_params.get("epochs", 20))
+        batch_size = args.tcn_batch_size or int(tcn_params.get("batch_size", 256))
+        tcn_lr = args.tcn_lr or float(tcn_params.get("learning_rate", 1e-3))
+        tcn_wd = args.tcn_weight_decay or float(tcn_params.get("weight_decay", 1e-4))
+        tcn_kernel_size = args.tcn_kernel_size or int(tcn_params.get("kernel_size", 5))
+        tcn_dropout = args.tcn_dropout if args.tcn_dropout is not None else float(tcn_params.get("dropout", 0.1))
+        tcn_patience = args.tcn_patience or int(tcn_params.get("patience", 5))
+        tcn_device = args.tcn_device or str(tcn_params.get("device", "cuda"))
+        tcn_stride = args.tcn_stride if args.tcn_stride is not None else int(tcn_params.get("stride", 2))
+        tcn_workers = args.tcn_workers if args.tcn_workers is not None else int(tcn_params.get("num_workers", 0))
+
+        result = train_tcn(
+            data_dir=args.data_dir,
+            window_size=window_size,
+            num_channels=tcn_channels,
+            kernel_size=tcn_kernel_size,
+            dropout=tcn_dropout,
+            batch_size=batch_size,
+            epochs=epochs,
+            patience=tcn_patience,
+            lr=tcn_lr,
+            weight_decay=tcn_wd,
+            n_splits=n_splits,
+            seed=seed,
+            device=tcn_device,
+            residual_target=residual_target,
+            baseline_method=baseline_method,
+            stride=tcn_stride,
+            num_workers=tcn_workers,
+        )
+
+        import torch
+        model_cpu = result.models[0].cpu()
+        tcn_state = {k: v for k, v in model_cpu.state_dict().items()}
+        tcn_meta = result.tcn_metadata or {}
+        payload = build_model_payload(
+            models=result.models,
+            feature_columns=result.feature_columns,
+            residual_target=result.residual_target,
+            baseline_method=result.baseline_method,
+            feature_flags=None,
+            model_type="tcn",
+            run_name=run_config.get("name"),
+            seed_list=result.seed_list,
+            n_splits=n_splits,
+            cv_strategy=result.cv_strategy,
+            cv_rmse_mean=result.cv_rmse_mean,
+            cv_rmse_std=result.cv_rmse_std,
+            cv_rmse_folds=result.cv_rmse_folds,
+            train_rows=result.train_rows,
+            train_wells=result.train_wells,
+            config_path=args.config,
+            tcn_state_dict=tcn_state,
+            tcn_target_scaler=tcn_meta.get("y_scaler"),
+            tcn_window_size=tcn_meta.get("window_size", window_size),
+            tcn_feature_columns=result.feature_columns,
+            tcn_num_channels=tcn_meta.get("num_channels", list(tcn_channels)),
+            tcn_kernel_size=tcn_meta.get("kernel_size", tcn_kernel_size),
+            tcn_dropout=tcn_meta.get("dropout", tcn_dropout),
+            tcn_input_scaler=tcn_meta.get("x_scaler"),
+            tcn_input_size=tcn_meta.get("input_size"),
+        )
+    else:
+        result = run_train(
+            data_dir=args.data_dir,
+            n_splits=n_splits,
+            seed_list=seed_list,
+            cv_strategy=cv_strategy,
+            strat_tvt_bins=strat_tvt_bins,
+            strat_spatial_clusters=strat_spatial_clusters,
+            model_params=model_params,
+            include_tvt_input=include_tvt_input,
+            include_geometry=include_geometry,
+            include_gr=include_gr,
+            include_gr_dwt=include_gr_dwt,
+            include_trajectory=include_trajectory,
+            include_typewell=include_typewell,
+            include_spatial=include_spatial,
+            include_dtw=include_dtw,
+            include_geology=include_geology,
+            include_beam=include_beam,
+            include_formation_plane=include_formation_plane,
+            include_z_drift=include_z_drift,
+            residual_target=residual_target,
+            baseline_method=baseline_method,
+            eval_postproc=args.eval_postproc,
+        )
+
+        feature_flags = make_feature_flags(
+            include_tvt_input=include_tvt_input and not residual_target,
+            include_geometry=include_geometry,
+            include_gr=include_gr,
+            include_trajectory=include_trajectory,
+            include_typewell=include_typewell,
+            include_gr_dwt=include_gr_dwt,
+            include_spatial=include_spatial,
+            include_dtw=include_dtw,
+            include_geology=include_geology,
+            include_beam=include_beam,
+            include_formation_plane=include_formation_plane,
+            include_z_drift=include_z_drift,
+        )
+        payload = build_model_payload(
+            models=result.models,
+            feature_columns=result.feature_columns,
+            residual_target=result.residual_target,
+            baseline_method=result.baseline_method,
+            feature_flags=feature_flags,
+            model_type=str(model_config.get("type", "lightgbm")),
+            run_name=run_config.get("name"),
+            seed_list=result.seed_list,
+            n_splits=n_splits,
+            cv_strategy=result.cv_strategy,
+            cv_rmse_mean=result.cv_rmse_mean,
+            cv_rmse_std=result.cv_rmse_std,
+            cv_rmse_folds=result.cv_rmse_folds,
+            train_rows=result.train_rows,
+            train_wells=result.train_wells,
+            config_path=args.config,
+            model_params=model_params,
+            clip_lower=result.clip_bounds[0] if result.clip_bounds else None,
+            clip_upper=result.clip_bounds[1] if result.clip_bounds else None,
+        )
+
     with open(output_model, "wb") as f:
         pickle.dump(payload, f)
 
@@ -183,6 +287,13 @@ def main() -> None:
     print(f"Train rows (post-PS): {result.train_rows}")
     print(f"Train wells: {result.train_wells}")
     print(f"Model saved: {output_model}")
+
+    if args.save_oof and result.oof_df is not None:
+        from rogii.oof import save_oof
+        run_name = run_config.get("name", "unknown")
+        strategy = str(model_config.get("type", "lgbm"))
+        oof_path = save_oof(result.oof_df, "outputs", f"{run_name}_{strategy}")
+        print(f"OOF saved: {oof_path}")
 
 
 if __name__ == "__main__":

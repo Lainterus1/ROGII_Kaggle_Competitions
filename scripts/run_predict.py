@@ -76,25 +76,52 @@ def main() -> None:
     )
     flags = contract.feature_flags
 
-    submission = run_predict(
-        args.data_dir,
-        contract.models,
-        include_tvt_input=flags["include_tvt_input"],
-        include_geometry=flags["include_geometry"],
-        include_gr=flags["include_gr"],
-        include_gr_dwt=flags["include_gr_dwt"],
-        include_trajectory=flags["include_trajectory"],
-        include_typewell=flags["include_typewell"],
-        include_spatial=flags["include_spatial"],
-        include_dtw=flags["include_dtw"],
-        include_geology=flags["include_geology"],
-        include_beam=flags["include_beam"],
-        include_formation_plane=flags["include_formation_plane"],
-        include_z_drift=flags["include_z_drift"],
-        residual_target=contract.residual_target,
-        baseline_method=contract.baseline_method,
-        feature_columns=contract.feature_columns,
-    )
+    if contract.model_metadata and contract.model_metadata.get("type") == "tcn":
+        from rogii.predict import predict_tcn
+        from rogii.tcn_model import TCNModel
+
+        meta = contract.model_metadata
+        input_size = meta.get("input_size", len(meta["feature_columns"]))
+        tcn_model = TCNModel(
+            input_size=input_size,
+            num_channels=meta["num_channels"],
+            kernel_size=int(meta.get("kernel_size", 5)),
+            dropout=float(meta.get("dropout", 0.1)),
+        )
+        tcn_model.load_state_dict(meta["state_dict"])
+        scaler = meta["target_scaler"]
+        window_size = meta["window_size"]
+
+        submission = predict_tcn(
+            args.data_dir,
+            tcn_model,
+            scaler,
+            window_size,
+            meta["feature_columns"],
+            input_scaler=meta.get("input_scaler"),
+            residual_target=contract.residual_target,
+            baseline_method=contract.baseline_method,
+        )
+    else:
+        submission = run_predict(
+            args.data_dir,
+            contract.models,
+            include_tvt_input=flags["include_tvt_input"],
+            include_geometry=flags["include_geometry"],
+            include_gr=flags["include_gr"],
+            include_gr_dwt=flags["include_gr_dwt"],
+            include_trajectory=flags["include_trajectory"],
+            include_typewell=flags["include_typewell"],
+            include_spatial=flags["include_spatial"],
+            include_dtw=flags["include_dtw"],
+            include_geology=flags["include_geology"],
+            include_beam=flags["include_beam"],
+            include_formation_plane=flags["include_formation_plane"],
+            include_z_drift=flags["include_z_drift"],
+            residual_target=contract.residual_target,
+            baseline_method=contract.baseline_method,
+            feature_columns=contract.feature_columns,
+        )
 
     apply_savgol = args.savgol_smooth
     apply_clip = args.tvt_clip

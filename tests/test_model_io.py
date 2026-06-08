@@ -79,6 +79,38 @@ def test_validate_feature_columns_returns_expected_order() -> None:
     assert validate_feature_columns(["MD", "GR"], ["MD", "GR"]) == ["MD", "GR"]
 
 
+def test_tcn_payload_preserves_architecture_metadata() -> None:
+    payload = build_model_payload(
+        models=["model"],
+        feature_columns=["X", "Y"],
+        residual_target=True,
+        model_type="tcn",
+        tcn_state_dict={"weight": "value"},
+        tcn_target_scaler="scaler",
+        tcn_window_size=64,
+        tcn_feature_columns=["X", "Y"],
+        tcn_num_channels=[16, 32],
+        tcn_kernel_size=3,
+        tcn_dropout=0.0,
+        tcn_input_scaler="x_scaler",
+    )
+
+    contract = resolve_prediction_contract(payload)
+
+    assert contract.model_metadata == {
+        "type": "tcn",
+        "state_dict": {"weight": "value"},
+        "target_scaler": "scaler",
+        "window_size": 64,
+        "feature_columns": ["X", "Y"],
+        "num_channels": [16, 32],
+        "kernel_size": 3,
+        "dropout": 0.0,
+        "input_scaler": "x_scaler",
+        "input_size": None,
+    }
+
+
 # --- Multi-model / multi-seed tests ---
 
 
@@ -113,4 +145,3 @@ def test_legacy_raw_model_is_wrapped_in_list() -> None:
     contract = resolve_prediction_contract("raw_model")
     assert contract.models == ["raw_model"]
     assert contract.is_multi_seed is False
-

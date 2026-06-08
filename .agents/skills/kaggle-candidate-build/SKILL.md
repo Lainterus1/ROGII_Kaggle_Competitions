@@ -22,7 +22,7 @@ Every candidate must have the same strict structure:
 | Artifact | Rule |
 |---|---|
 | Candidate slug | Short stable slug, for example `a2b-spatial` |
-| Source code | Comes from `rogii-repo-v2` or a documented candidate repo dataset |
+| Source code | Comes from a candidate-specific repo dataset (`rogii-repo-<slug>`) created via `kagglehub.dataset_upload` |
 | Model artifact | Stored in a candidate-specific Kaggle Dataset |
 | Dependencies | Stored in a candidate-specific offline dependency dataset if needed |
 | Inference kernel | Candidate-specific Kaggle kernel with metadata |
@@ -56,25 +56,24 @@ Use this naming pattern unless the user gives a better slug:
 ## Procedure
 
 1. Define candidate slug, purpose and expected feature/model flags.
-2. Check whether source code changed since the current `rogii-repo-v2` Dataset.
-3. If source changed, update `rogii-repo-v2` before candidate inference.
-4. Train or locate the candidate model.
-5. Confirm the model payload stores feature flags, target mode and feature columns.
-6. Upload the model file to the candidate model dataset.
-7. Check whether inference imports any package unavailable in offline Kaggle.
-8. If extra packages are needed, create a candidate dependency dataset with wheels or installable files.
-9. Create a candidate inference kernel folder with notebook and `kernel-metadata.json`.
-10. Metadata must include repo dataset, model dataset, dependency dataset if needed, and competition source.
-11. Notebook must run with internet OFF.
-12. Notebook may install dependencies only from attached offline inputs.
-13. Notebook must call repository scripts and write `/kaggle/working/submission.csv`.
-14. Push candidate kernel with `kaggle kernels push -p <candidate_kernel_folder>`.
-15. Check logs for resolved repo/model/data/dependency paths.
-16. Check logs for prediction mode, submission row count and non-empty output.
-17. Download `submission.csv` to a temp directory.
-18. Validate submission with `scripts/validate_submission.py`.
-19. Submit using kernel-version mode only after explicit user approval.
-20. Update docs after run and after LB score is known.
+2. Check whether source code changed since the last candidate. If unchanged, reuse the same repo dataset.
+3. If source changed: create a NEW candidate-specific repo dataset (`rogii-repo-<slug>`) via `kagglehub.dataset_upload()`. Never overwrite an existing repo dataset.
+4. Verify: `kaggle datasets files daniilgonchar/rogii-repo-<slug>` must show files with full paths like `src/rogii/train.py`.
+5. Train or locate the candidate model.
+6. Confirm the model payload stores feature flags, target mode and feature columns.
+7. Upload the model file to the candidate model dataset via `kaggle datasets create -p <dir>` (single file, no directories).
+8. Check whether inference imports any package unavailable in offline Kaggle.
+9. If extra packages are needed, create a candidate dependency dataset with wheels.
+10. Create a candidate inference kernel folder with notebook and `kernel-metadata.json`.
+11. Metadata must include repo dataset, model dataset, dependency dataset if needed, and competition source.
+12. Notebook must run with internet OFF.
+13. Notebook may install dependencies only from attached offline inputs.
+14. Notebook must call repository scripts and write `/kaggle/working/submission.csv`.
+15. Push candidate kernel with `kaggle kernels push -p <candidate_kernel_folder>`.
+16. Wait for auto-run, download output: `kaggle kernels output <kernel> -p <tmp> --file-pattern submission.csv`.
+17. Validate submission with `scripts/validate_submission.py`.
+18. Submit using kernel-version mode only after explicit user approval.
+19. Update docs after run and after LB score is known.
 
 ## Submit command
 
@@ -105,7 +104,7 @@ kaggle competitions submit -c rogii-wellbore-geology-prediction -f submission.cs
   "enable_gpu": "false",
   "enable_internet": "false",
   "dataset_sources": [
-    "daniilgonchar/rogii-repo-v2",
+    "daniilgonchar/rogii-repo-<slug>",
     "daniilgonchar/rogii-models-<slug>"
   ],
   "competition_sources": [
@@ -161,6 +160,8 @@ Use together with:
 ## Forbidden actions
 
 - Do not use direct file submit for this competition.
-- Do not rely on internet during Submit rerun.
-- Do not overwrite R1 fallback model/kernel without explicit request.
+- Do not rely on internet during Kaggle Submit rerun.
+- Do not overwrite R1 fallback model/kernel/repo dataset.
+- Do not update an existing repo dataset for a new candidate — always create a new one.
+- Do not use `kaggle datasets version -p` for repo datasets — it skips directories. Use `kagglehub.dataset_upload()`.
 - Do not commit model files, submissions, data, wheels, or runtime artifacts.

@@ -17,6 +17,7 @@ class PredictionContract:
     feature_flags: dict[str, bool]
     feature_columns: list[str] | None
     is_multi_seed: bool = False
+    model_metadata: dict | None = None
 
 
 def make_feature_flags(
@@ -72,6 +73,15 @@ def build_model_payload(
     model_params: dict[str, Any] | None = None,
     clip_lower: float | None = None,
     clip_upper: float | None = None,
+    tcn_state_dict: dict[str, Any] | None = None,
+    tcn_target_scaler: Any = None,
+    tcn_window_size: int | None = None,
+    tcn_feature_columns: list[str] | None = None,
+    tcn_num_channels: list[int] | None = None,
+    tcn_kernel_size: int | None = None,
+    tcn_dropout: float | None = None,
+    tcn_input_scaler: Any = None,
+    tcn_input_size: int | None = None,
 ) -> dict[str, Any]:
     """Build a versioned payload that prevents train/predict feature drift."""
     if feature_flags is None:
@@ -114,6 +124,16 @@ def build_model_payload(
         payload["clip_lower"] = clip_lower
     if clip_upper is not None:
         payload["clip_upper"] = clip_upper
+    if model_type == "tcn":
+        payload["tcn_state_dict"] = tcn_state_dict
+        payload["tcn_target_scaler"] = tcn_target_scaler
+        payload["tcn_window_size"] = tcn_window_size
+        payload["tcn_feature_columns"] = tcn_feature_columns or list(feature_columns)
+        payload["tcn_num_channels"] = list(tcn_num_channels) if tcn_num_channels else []
+        payload["tcn_kernel_size"] = tcn_kernel_size
+        payload["tcn_dropout"] = tcn_dropout
+        payload["tcn_input_scaler"] = tcn_input_scaler
+        payload["tcn_input_size"] = tcn_input_size
     return payload
 
 
@@ -168,6 +188,24 @@ def resolve_prediction_contract(
     if feature_columns is not None:
         feature_columns = list(feature_columns)
 
+    model_metadata: dict | None = None
+    model_type = payload.get("model_type")
+    if model_type == "tcn":
+        tcn_kernel_size = payload.get("tcn_kernel_size")
+        tcn_dropout = payload.get("tcn_dropout")
+        model_metadata = {
+            "type": "tcn",
+            "state_dict": payload.get("tcn_state_dict"),
+            "target_scaler": payload.get("tcn_target_scaler"),
+            "window_size": payload.get("tcn_window_size"),
+            "feature_columns": payload.get("tcn_feature_columns") or feature_columns,
+            "num_channels": payload.get("tcn_num_channels", []),
+            "kernel_size": 5 if tcn_kernel_size is None else tcn_kernel_size,
+            "dropout": 0.1 if tcn_dropout is None else tcn_dropout,
+            "input_scaler": payload.get("tcn_input_scaler"),
+            "input_size": payload.get("tcn_input_size"),
+        }
+
     return PredictionContract(
         models=models,
         residual_target=residual_target,
@@ -175,6 +213,7 @@ def resolve_prediction_contract(
         feature_flags=payload_flags,
         feature_columns=feature_columns,
         is_multi_seed=is_multi_seed,
+        model_metadata=model_metadata,
     )
 
 

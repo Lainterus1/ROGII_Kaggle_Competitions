@@ -97,6 +97,15 @@ Planned architecture locations:
 | `tests/` | Contract, validation, metric and smoke tests |
 | `notebooks/` | Thin Kaggle runner and lightweight EDA only |
 | `.agents/skills/` | Future reusable project-specific agent skills |
+| `.opencode/opencode.json` | Project OpenCode configuration |
+| `.opencode/plugin/rogii-guards.ts` | Project guard hooks for artifacts, Kaggle submission, leakage-sensitive edits and verification reminders |
+
+OpenCode guard locations:
+
+| Path | Purpose |
+|---|---|
+| `.opencode/opencode.json` | Loads the project-specific OpenCode plugin |
+| `.opencode/plugin/rogii-guards.ts` | Blocks high-risk Git/Kaggle actions and emits low-noise reminders for validation, leakage review and experiment logging |
 
 Kaggle runner locations:
 

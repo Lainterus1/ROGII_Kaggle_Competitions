@@ -182,3 +182,96 @@ def _run_predict_with_spatial(
         predictions.append(pred)
 
     return pd.DataFrame({"id": sample["id"].astype(str), "tvt": predictions})
+
+
+def predict_tcn(
+    data_dir: str | Path,
+    model,
+    scaler,
+    window_size: int,
+    feature_columns: list[str],
+    input_scaler=None,
+    residual_target: bool = True,
+    baseline_method: str = "flat",
+    device: str = "cuda",
+) -> pd.DataFrame:
+    import torch
+
+    if device == "cuda" and torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    sample = read_sample_submission(data_dir)
+    test_well_ids = list_well_ids(data_dir, "test")
+
+    model.to(device)
+    model.eval()
+
+    well_preds: dict[str, np.ndarray] = {}
+    well_baselines: dict[str, np.ndarray] = {}
+
+    for wid in test_well_ids:
+        horizontal = read_horizontal_well(data_dir, "test", wid)
+        from rogii.sequence_features import build_sequence_features
+        seq_df = build_sequence_features(horizontal)
+        seq_df = seq_df[feature_columns]
+        X = seq_df.to_numpy(dtype=np.float64)
+
+        # Per-well normalization (same as training)
+        mean = X.mean(axis=0, keepdims=True)
+        std = X.std(axis=0, keepdims=True)
+        std = np.where(std < 1e-8, 1.0, std)
+        X = ((X - mean) / std).astype(np.float32)
+
+        # Apply global absolute-coordinate scaler (Phase 2 dual normalization)
+        if input_scaler is not None:
+            X_abs = horizontal[["X", "Y", "Z", "MD"]].to_numpy(dtype=np.float64)
+            X_abs_scaled = input_scaler.transform(X_abs).astype(np.float32)
+            X = np.concatenate([X, X_abs_scaled], axis=1)  # (T, 65+4)
+
+        if residual_target:
+            well_baselines[wid] = compute_baseline(horizontal, method=baseline_method)
+
+        T = len(X)
+        if T < window_size:
+            pred_delta = np.zeros(T, dtype=float)
+            well_preds[wid] = pred_delta
+            continue
+
+        windows = np.stack([X[t : t + window_size] for t in range(T - window_size + 1)])
+        xb = torch.tensor(windows, dtype=torch.float32).permute(0, 2, 1).to(device)
+
+        batch_size = 256
+        pred_scaled_list: list[np.ndarray] = []
+        with torch.no_grad():
+            for start in range(0, len(xb), batch_size):
+                batch = xb[start : start + batch_size]
+                pred_batch = model(batch).cpu().numpy().ravel()
+                pred_scaled_list.append(pred_batch)
+        pred_scaled = np.concatenate(pred_scaled_list)
+        if scaler is not None:
+            pred_delta = scaler.inverse_transform(pred_scaled.reshape(-1, 1)).ravel()
+        else:
+            pred_delta = pred_scaled
+
+        full_pred = np.full(T, np.nan, dtype=float)
+        full_pred[window_size - 1:] = pred_delta
+        if window_size - 1 > 0:
+            full_pred[:window_size - 1] = pred_delta[0]
+        well_preds[wid] = full_pred
+
+    predictions: list[float] = []
+    for submission_id in sample["id"].astype(str):
+        well_id, row_index = parse_submission_id(submission_id)
+        preds = well_preds[well_id]
+        if row_index < 0 or row_index >= len(preds):
+            raise IndexError(f"Submission row index out of bounds for {submission_id}")
+        pred = float(preds[row_index])
+        if residual_target:
+            pred = well_baselines[well_id][row_index] + pred
+        if not np.isfinite(pred):
+            raise ValueError(f"Non-finite prediction for {submission_id}: {pred}")
+        predictions.append(pred)
+
+    return pd.DataFrame({"id": sample["id"].astype(str), "tvt": predictions})

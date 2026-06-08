@@ -5,6 +5,12 @@ from pathlib import Path
 import pandas as pd
 
 
+try:
+    pd.options.future.infer_string = False
+except (AttributeError, KeyError):
+    pass
+
+
 HORIZONTAL_SUFFIX = "__horizontal_well.csv"
 TYPEWELL_SUFFIX = "__typewell.csv"
 
@@ -66,14 +72,14 @@ def typewell_path(data_dir: str | Path, split: str, well_id: str) -> Path:
 def read_horizontal_well(data_dir: str | Path, split: str, well_id: str) -> pd.DataFrame:
     """Read one horizontal well file and attach a `well_id` column."""
     frame = pd.read_csv(horizontal_well_path(data_dir, split, well_id))
-    frame.insert(0, "well_id", well_id)
+    frame.insert(0, "well_id", pd.Series([well_id] * len(frame), dtype=object))
     return frame
 
 
 def read_typewell(data_dir: str | Path, split: str, well_id: str) -> pd.DataFrame:
     """Read one typewell file and attach a `well_id` column."""
     frame = pd.read_csv(typewell_path(data_dir, split, well_id))
-    frame.insert(0, "well_id", well_id)
+    frame.insert(0, "well_id", pd.Series([well_id] * len(frame), dtype=object))
     return frame
 
 

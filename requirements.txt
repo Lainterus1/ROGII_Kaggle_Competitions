@@ -9,3 +9,4 @@ scipy
 pywavelets
 numba
 pytest
+torch

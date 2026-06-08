@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-06-08 - TCN tuning validation alignment
+
+### Changed
+- `scripts/tune_tcn.py` - replaced the accidental 50/50 tuning split with fold-selectable 5-fold `GroupKFold`, added dense validation RMSE monitoring and final `run_train.py` command output.
+- `src/rogii/train.py` - TCN CV now fits target scaling on each train fold and stores an all-train scaler for the final model.
+- `scripts/run_train.py`, `scripts/run_predict.py`, `src/rogii/model_io.py`, `src/rogii/predict.py` - propagated TCN architecture and baseline metadata needed for Kaggle transfer.
+- `src/rogii/data_loading.py` - disabled pandas Arrow string inference for CSV loading and inserts `well_id` as object dtype to avoid local pyarrow-backed string access violations.
+- `docs/EXPERIMENT_LOG.md` - recorded `a5_tcn_tuned_small` full 5-fold tuner validation.
+
+### Verification
+- `python -m py_compile scripts/tune_tcn.py scripts/run_train.py scripts/run_predict.py`
+- `python -m pytest tests/test_model_io.py tests/test_validation_split.py`
+- `python -m pytest tests/test_tcn_pipeline.py tests/test_tcn_model.py`
+- `python -m pytest tests` - 210 passed.
+- `python scripts/tune_tcn.py --folds all` - best tuned small TCN CV `15.036 ± 0.848`.
+
+## 2026-06-07 - OpenCode project guard hooks
+
+### Added
+- `.opencode/opencode.json` - loads project-specific OpenCode hooks.
+- `.opencode/plugin/rogii-guards.ts` - blocks staged runtime artifacts/secrets on Git commit, tracked artifacts on Git push and Kaggle submit commands without `ROGII_ALLOW_KAGGLE_SUBMIT=1`; emits reminders for submission validation, leakage-sensitive edits, training logs and relevant tests.
+
+### Changed
+- `docs/CONTEXT_MAP.md` - added OpenCode guard locations for future agents.
+
+### Verification
+- JSON syntax check for `.opencode/opencode.json`.
+- TypeScript parse check for `.opencode/plugin/rogii-guards.ts`.
+- Runtime smoke check confirmed unapproved `kaggle competitions submit` is blocked.
+
 ## 2026-06-06 — A2a Kaggle candidate packaging + LB result
 
 ### Added

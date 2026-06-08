@@ -27,11 +27,17 @@ Current best clean baseline:
 
 | Item | Value |
 |---|---|---|
-| Stage | **R2** (R1 model + Savgol w=31 p=2), OOF 14.21, LB 12.239 |
-| R1 | 18 tabular features, OOF 14.22, LB 12.247 — model-only, no post-processing |
+| Stage | **R3** (3-seed ensemble [42,7,123] + Savgol w=31 p=2), CV 14.052, LB 12.177 |
+| R2 | R1 model + Savgol, CV 14.21, LB 12.239 |
+| R1 | 18 tabular features, CV 14.22, LB 12.247 — model-only, no post-processing |
 | Tabular ceiling | LB ~12.2, all A1-B3 experiments flat or degraded |
 
-Active development: **Tabular ceiling confirmed** — all feature families exhausted. Next: architecture diversity (CNN, ensemble).
+Active development: **Stage A5 — Architecture Diversity.** Analysis of top leader solutions (LB 5.99–7.5) reveals three critical gaps vs our approach:
+1. **Sequence models** (TCN/CNN with causal convolutions on raw X,Y,Z,GR,MD) — leaders use them; we don't.
+2. **Physics-based standalone predictors** (Beam Search + Particle Filter as independent strategies, NOT as tabular features for LightGBM) — we tried beam as features (degraded); leaders blend beam/PF as separate predictors.
+3. **Multi-strategy blending** (ML model + physics + deep learning) — we have single-strategy multi-seed averaging.
+
+Tabular ceiling at CV ~14.1 / LB ~12.2 is the LightGBM-only ceiling, not the problem ceiling. A5 targets CV < 10 via architecture diversity.
 
 ## Guiding constraints
 
@@ -43,8 +49,8 @@ Active development: **Tabular ceiling confirmed** — all feature families exhau
 - Add new dependencies only as approved staged dependencies: `PyWavelets`, `scipy`, `catboost` and optionally `torch`.
 - Promote a stage only after tests pass, leakage review passes, submission validation passes, and CV improves or the stage produces useful diagnostics.
 - Kaggle submission requires explicit user approval. After approval, the agent may submit a validated kernel version through Kaggle CLI/API.
-- Current stable offline submit path: `00-rogii-inference-r1` uses `rogii-repo-v2` + `rogii-models-v2`, internet OFF, and `notebooks/kernel-metadata.json` for `kaggle kernels push -p notebooks`.
-- For candidate builds, do not overwrite R1 fallback artifacts. Use candidate-specific model/dependency datasets and kernel metadata. Update `rogii-repo-v2` first if source code changed.
+- Current offline submit path: inference kernel uses a candidate-specific repo dataset (`rogii-repo-<slug>`) + model dataset, internet OFF. Each candidate gets its own datasets — never update a shared repo dataset.
+- For candidate builds, do not overwrite R1 fallback artifacts. Use candidate-specific repo/model/dependency datasets and kernel metadata. If source code changed, create a fresh candidate repo dataset via `kagglehub.dataset_upload()` — never update an existing one.
 
 ## Standard Gate After Each Stage
 
@@ -58,7 +64,7 @@ Active development: **Tabular ceiling confirmed** — all feature families exhau
 8. Update `docs/ROADMAP.md`, `docs/TASKS.md`, `docs/VALIDATION_STRATEGY.md` or `docs/KNOWN_ISSUES.md` when stage status, validation contracts or risks change.
 9. Do not commit `data/`, `outputs/`, `models/`, `submissions/`, `mlruns/`, OOF artifacts or generated submissions.
 10. For R1 recovery submissions: push `00` with `kaggle kernels push -p notebooks`, validate kernel output, then submit the kernel version with `kaggle competitions submit -k daniilgonchar/00-rogii-inference-r1 -v <version> -f submission.csv` after explicit approval.
-11. For candidate submissions: update repo dataset if code changed, train/upload a candidate model dataset, attach offline dependency dataset if needed, push a candidate kernel version, validate output, then submit the candidate kernel version after explicit approval.
+11. For candidate submissions: if source code changed, create a new candidate-specific repo dataset via `kagglehub.dataset_upload()` (see `.agents/skills/kaggle-runner/SKILL.md`). Train/upload a candidate model dataset, attach offline dependency dataset if needed, push a candidate kernel version, validate output, then submit the candidate kernel version after explicit approval.
 
 ## Stage A0: Pipeline Contracts and Roadmap Reset
 
@@ -170,41 +176,337 @@ Status: **Rejected.** All three sub-stages degraded CV vs A2a (14.13).
 - A3b.1 Signed-log: CV 14.64 (+0.51). Residuals not heavy-tailed (bounded ±40, skew 0.74).
 - A3b.2 Derivative model: CV 14.32 (+0.19). Integration error accumulation negates any slope-prediction benefit.
 
-## Stage A4: Structural Blending and Pipeline-Dependent Models
+## Stage A4: Multi-Seed Averaging and Validation Refinements
 
-Goal: improve generalization through diverse models and standardized OOF predictions.
+Status: **Partially promoted.** Multi-seed ensemble [42,7,123] promoted as **R3** (CV 14.052, LB 12.177). StratifiedGroupKFold explored but not promoted. CatBoost and OOF stacking deferred to A5.
+
+### A4a: Multi-Seed LightGBM — **Promoted → R3**
+
+CV: 14.052 ± 0.868 (GroupKFold 5) vs single-seed 14.191. LB: 12.177 (−0.062 vs R2 12.239). 3 seeds [42,7,123] + Savgol w=31 p=2.
+
+### A4b: StratifiedGroupKFold — Not promoted
+
+Best config Strat(4,5) + multi-seed: CV 13.763 ± 1.523. Higher std reflects fold heterogeneity — potentially better CV/LB correlation but not yet validated on LB. Code kept behind `--cv-strategy stratified`.
+
+### A4c: CatBoost + Stacking — Deferred to A5
+
+Multi-model ensemble requires OOF infrastructure and diverse model types first.
+
+---
+
+## Stage A5: Architecture Diversity — Sequence Models + OOF Infrastructure + Multi-Strategy Ensemble
+
+Status: **Planned.** Implementation starting.
+
+Goal: close the gap between R3 (LB 12.177) and leader solutions (LB 5.99–7.5) through architecture diversity. Analysis of top 20 leader solutions and public notebooks (plagiagia v2.8, stpeteishii TCN, Scott Weeden v13 seq-CNN, adarsh5harma Stacker v2) confirms three critical gaps.
+
+### Root Cause Analysis (Leader Methods vs Our Approach)
+
+| Method | Leaders (LB 5.99–7.5) | Our approach (LB 12.177) |
+|---|---|---|
+| **Model** | TCN, Seq-CNN, Ridge stacker, HGB | LightGBM only |
+| **Sequence modeling** | Causal convolutions with diff/lag/roll on raw X,Y,Z,GR,MD | None — 18 hand-crafted tabular features |
+| **Physics predictions** | Beam Search + Particle Filter as **independent predictors** | Beam Search as **features** for LightGBM → degraded (B1: CV 14.43) |
+| **Blending** | 3+ strategies: ML + physics + deep learning | Single-strategy multi-seed averaging |
+| **Feature approach** | Raw coordinates + automatic diff/lag/roll → ~50-70 features | 18 manually engineered features |
+
+**Critical insight:** Beam Search and Particle Filter work, but NOT as tabular features for LightGBM. They must be independent predictors blended with ML model output. We confirmed this negatively — B1 beam features CV 14.43 (worse than R1). Leader approach: `0.5×ML + 0.25×Beam + 0.25×PF`.
+
+### Dependency Graph
+
+```
+                         ┌─→ A5a (TCN) ──────────────┐
+OOF-infrastructure (A5.0) ┤                             ├──→ A5c (Ensemble) ──→ A5d (HPO, optional)
+                         ├─→ A5b (Beam/PF predictors) ─┤
+                         └─→ R3 (LightGBM, done) ──────┘
+```
+
+A5a and A5b are independent. A5c depends on both + R3. A5d is final polish.
+
+### Stage A5.0: OOF Infrastructure (gate for A5a-A5c)
+
+Goal: standardize saving/loading of out-of-fold predictions across all model types so A5c can blend them without retraining.
 
 Scope:
+- `src/rogii/oof.py` — `save_oof(df, path, strategy_name)` / `load_oof(path)`.
+  - OOF contract: `pd.DataFrame` columns `["well_id", "row_idx", "y_true", "y_pred", "baseline"]`.
+  - Values in delta-space (residual from baseline), baseline=0 when `residual_target=False`.
+  - Format: Parquet in `outputs/oof/<run_name>_<strategy>_oof.parquet`.
+- `src/rogii/train.py` — `TrainResult` gains `oof_df: pd.DataFrame | None`. CV loop always collects `oof_rows` (currently only when `eval_postproc=True`). After CV, converts to `_build_oof_per_well()` → `oof_df`.
+- `scripts/run_train.py` — new `--save-oof` flag. Saves `train_result.oof_df` to `outputs/oof/`.
 
-- Standardize OOF prediction artifacts for stacking under ignored runtime directories.
-- Add multi-seed LightGBM averaging, starting with seeds `42`, `7`, `123`.
-- Add CatBoost with Ordered Boosting after dependency installation is verified.
-- Fit CatBoost on the same folds and feature set as the promoted tabular baseline.
-- Add Ridge stacking or weighted averaging over OOF predictions.
-- Consider a 1D CNN only after separate approval of the optional `torch` dependency and runtime budget.
-
-Primary files:
-
-- New `src/rogii/oof.py`
-- New `src/rogii/ensemble.py`
-- `src/rogii/models.py`
-- `src/rogii/train.py`
-- `src/rogii/predict.py`
-- `scripts/run_train.py`
-- `scripts/run_predict.py`
-- `requirements.txt`
-- `tests/test_ensemble.py`
+Primary files: `src/rogii/oof.py`, `src/rogii/train.py`, `scripts/run_train.py`, `tests/test_oof.py`.
 
 Verification:
+- `python -m pytest tests/test_oof.py` — OOF save/load roundtrip, column contract, delta-space preservation.
+- `python scripts/run_train.py --data-dir data --seed 42 --n-splits 5 --residual-target --include-geometry --include-gr --save-oof` — file `outputs/oof/r1_lgbm_optimized_lgbm_oof.parquet` created.
 
-- `python -m pytest tests`
-- Compare single-model OOF RMSE, multi-seed average OOF RMSE and stacking OOF RMSE.
-- Validate that OOF artifacts contain no raw target columns beyond allowed prediction/target arrays needed for local scoring.
-- Generate and validate submission from the final blended model.
+### Stage A5a: TCN Sequence Model (highest priority)
+
+**Status: Implemented (raw v0). Pre-hyperparameter plan active.**
+
+Goal: implement Temporal Convolutional Network on raw coordinates with automatic diff/lag/roll features. Target: CV < 12 (vs R3 14.05).
+
+**Why TCN:** causal convolutions (no look-ahead leakage), proven by leaders (stpeteishii TCN ~LB 7.0), GPU-friendly, handles variable-length sequences per well. TCN captures sequential signal (GR curve shape, trajectory undulations) that LightGBM on tabular features cannot.
+
+**Current status:** TCN v0 is implemented and trains, but has critical gaps:
+- Train uses post-PS-only sequences; predict uses full-well sliding windows — mismatch causes degraded predict.
+- Per-well normalization removes absolute X/Y/Z/MD position (the primary geological signal).
+- No R1-proven geometry/GR features as channels — TCN must re-discover them from raw coordinates.
+- `tune_tcn.py` and `train_tcn()` may diverge in evaluation contract.
+- Loss/LR/architecture not yet tuned — representation errors may mask learning capacity.
+
+**Pre-Hyperparameter Plan: bring TCN to a honest, strong baseline before any HP search.**
+
+Hyperparameters are deferred. The priority is fixing train/CV/predict contract, adding absolute coordinates as input, injecting R1-proven signals as sequence channels, unifying the evaluation path, and verifying the loss/objective. Only after a fixed control config improves over R3 does HP tuning resume.
+
+#### Fixed Control Config (for representation verification, not tuning)
+
+```
+channels = [32, 64, 128]
+window = 64
+kernel_size = 5
+lr = 3e-4
+epochs = 10
+patience = 4
+batch_size = 2048 or 4096
+stride = 4
+dropout = 0.1
+weight_decay = 1e-4
+```
+
+#### Phase 0: Diagnostics — **DONE. Results: `a5_tcn_control`, CV 15.03 (4 folds), see `docs/EXPERIMENT_LOG.md`.**
+
+Ran fixed control config (`channels=[32,64,128] window=64 kernel=5 lr=3e-4`) + R3 LGBM OOF comparison. Infrastructure created: `src/rogii/diagnostics.py`, `scripts/diagnose_tcn.py`, `tests/test_diagnostics.py` (14 tests). OOF contract extended with `fold` column.
+
+**Key findings (priority-changing):**
+
+| Finding | Value | Implication |
+|---|---|---|
+| RMSE by `frac_after_ps` | **7.2 → 20.0** (monotonic rise) | Early post-PS rows are **easiest**, late are hardest. Phase 1 (context) is NOT the primary error source. |
+| Prediction dispersion | **std_ratio 0.42** (severe flattening) | Per-well median 0.81 — flattening is **between-well**, not within-well. Per-well normalization kills absolute position signal. → **Phase 2 is #1 priority.** |
+| TCN vs LGBM error correlation | **0.76** (moderate) | Blend gain −0.21 (small). Errors overlap — TCN and LGBM fail on same wells. Need TCN to get different signals first. |
+| Fold spread | 14.62–15.98, fold 5 aborted | Phase 4 (unified eval) needed to fix abort + tune/train divergence. |
+
+**Re-ranked priority order (data-driven): Phase 2 → Phase 3 → Phase 4 → Phase 1 → Phase 5 → Phase 6.**
+
+#### Phase 1: Fix Train/Predict Context
+
+Currently train TCN learns only on post-PS sequences, but predict builds windows over full wells. This is a critical mismatch.
+
+| Step | Change | Criterion |
+|---|---|---|
+| 1 | `WellSequence` stores full-well features, target only for post-PS rows | Pre-PS used as context, not target |
+| 2 | Dataset builds window ending at target row | First post-PS target also trained |
+| 3 | Short context: use left-padding or repeat first row | No skip of first `window-1` post-PS rows |
+| 4 | `predict_tcn()` uses the same windowing contract | Train/CV/predict identical |
+| 5 | Add tests for inclusion of first post-PS rows | CV covers all post-PS submission-like rows |
+
+Files: `src/rogii/sequence_data.py`, `src/rogii/train.py`, `src/rogii/predict.py`, `tests/test_tcn_pipeline.py`, new/expanded `tests/test_sequence_data.py`.
+
+#### Phase 2: Return Absolute Coordinates — **IMPLEMENTED. Pending training gate.**
+
+Per-well normalization removes absolute position — the primary geological signal for this problem.
+
+| Step | Change | Criterion |
+|---|---|---|
+| 1 | Keep per-well normalized features | Model sees trajectory shape |
+| 2 | Add global-standardized absolute features | Model sees geological position |
+| 3 | Global scaler fit only on train folds in CV | No leakage through validation wells |
+| 4 | Final scaler fit on all train, saved in `tcn_metadata["x_scaler"]` | Kaggle predict reproducible |
+| 5 | `predict_tcn()` applies `input_scaler` param | No train/predict drift |
+
+**Implementation:** `WellSequence.X_abs` (T,4). `_fit_global_x_scaler()` fits `StandardScaler` on raw X/Y/Z/MD. `_scaled_sequences()` concatenates `[per_well_norm(65), global_scaled(4)]` → input_size=69. `build_model_payload` gets `tcn_input_scaler`, `tcn_input_size`. `run_train.py`/`run_predict.py` wired.
+
+**Gate:** Training with `configs/a5_tcn.yaml` must produce `std_ratio > 0.7` and screening folds (0,3) < 14.62/14.82.
+
+Files: `src/rogii/train.py`, `src/rogii/predict.py`, `src/rogii/model_io.py`, `src/rogii/sequence_data.py`, `scripts/run_train.py`, `scripts/run_predict.py`, `tests/test_tcn_pipeline.py`, `tests/test_model_io.py`.
+
+#### Phase 3: Add Proven R1 Features as Sequence Channels
+
+Do not force TCN to re-invent features that LightGBM already proved.
+
+Add causal/test-available sequence channels:
+
+| Feature group | Examples | Reason |
+|---|---|---|
+| PS geometry | `md_since_ps`, `frac_after_ps`, `dx/dy/dz_since_ps`, `dxy_since_ps` | Strong R1 features |
+| Local trajectory | `dxdmd`, `dydmd`, `dzdmd` | Borehole direction |
+| GR stable features | `gr_energy`, trailing `gr_roll_mean_101`, trailing `gr_roll_std_101` | Best GR-derived features |
+| Anchor/baseline | `last_tvt_input`, optional `baseline_value` | Explicit residual target link |
+| Position masks | `is_pre_ps`, `is_post_ps`, `rows_since_ps` | Model understands sequence phase |
+
+**Leakage rules for Phase 3:**
+
+| Risk | Rule |
+|---|---|
+| Post-PS `TVT` leakage | Never use `TVT` as feature |
+| `TVT_input` | Only known pre-PS anchor/baseline/PS boundary |
+| Global scalers | Fit only on train folds |
+| GR rolling | Default trailing/causal, no future rows |
+| Pre-PS context | Only input columns available in test |
+
+Files: `src/rogii/sequence_features.py`, `src/rogii/features.py` as reference, `tests/test_sequence_features.py`.
+
+#### Phase 4: Unified TCN Evaluation Path
+
+`tune_tcn.py` and `train_tcn()` may currently diverge.
+
+| Step | Change | Criterion |
+|---|---|---|
+| 1 | Extract common TCN CV/eval logic from tune/train | One contract: split/scaler/window/RMSE |
+| 2 | `tune_tcn.py` only sets candidates, calls evaluator | Tuning matches final train |
+| 3 | `run_train.py` uses same evaluator for CV | Kaggle-transfer honest |
+| 4 | OOF saved for TCN | Enables postprocess/blend analysis |
+
+Files: `src/rogii/train.py`, possibly new `src/rogii/tcn_training.py`, `scripts/tune_tcn.py`, `scripts/run_train.py`.
+
+#### Phase 5: Verify Objective/Loss
+
+This is about training formulation, not hyperparameter search.
+
+| Step | What to try | Criterion |
+|---|---|---|
+| 1 | Keep MSE as baseline | Compare with current |
+| 2 | Add `SmoothL1Loss` as option | If fold 5 / outliers stabilize |
+| 3 | Always evaluate RMSE in TVT/delta scale | Do not select by scaled MSE |
+| 4 | Check prediction dispersion | No flattening |
+
+Files: `src/rogii/train.py`, `scripts/tune_tcn.py`.
+
+#### Phase 6: Postprocessing and Blend
+
+TCN does not need to beat LGBM solo. More important: errors should be different.
+
+| Step | What to do | Criterion |
+|---|---|---|
+| 1 | Save TCN OOF | `(well_id, row_idx, y_true, y_pred, baseline)` |
+| 2 | Run Savgol/clipping on TCN OOF | Compare raw vs postproc |
+| 3 | Compare LGBM vs TCN error correlation | Low correlation = blend worthwhile |
+| 4 | Simple weighted blend LGBM+TCN OOF | Blend improves R3/R4 CV |
+| 5 | Only after OOF improvement consider Kaggle | Do not submit weak solo TCN |
+
+Files: `src/rogii/oof.py`, `src/rogii/postprocess.py`, future `src/rogii/ensemble.py`.
+
+#### Implementation Order (data-driven after Phase 0)
+
+1. **Phase 2:** Add dual input normalization: global absolute + per-well normalized. Fixes flattening (std_ratio 0.42 → target > 0.7).
+2. **Phase 3:** Add R1 geometry/GR sequence channels. Fixes monotonic RMSE rise with `frac_after_ps`.
+3. **Phase 4:** Unify `tune_tcn.py` and `train_tcn()` to one evaluator. Fixes fold 5 abort + eval consistency.
+4. **Phase 1:** Fix full-well context and target-index dataset. Correctness fix, not primary error source.
+5. **Phase 5:** Verify objective/loss. MSE baseline + SmoothL1Loss option.
+6. **Phase 6:** Postprocessing + blend. Only after TCN gets different signals than LGBM.
+
+Screening folds: `0, 3, 4` are used for quick validation; full 5-fold CV only after screening improves.
+
+#### Gates (updated after Phase 0)
+
+| Gate | Condition | Baseline |
+|---|---|---|
+| Entry | Fixed control config CV `15.03` (4 folds), std_ratio `0.42` | Current state |
+| After Phase 2 | std_ratio > 0.7, screening folds `0,3` better than `14.62, 14.82` | `a5_tcn_control` |
+| After Phase 3 | Screening folds close to `14.2–14.5` (LGBM R1 level) | — |
+| Full CV | Run only if screening improved | — |
+| Promotion | Full CV `<= 14.0` OR blend improves active baseline | R3 CV `14.05` |
+
+#### What NOT to Do Yet
+
+- Do not continue random LR/channel search on current TCN.
+- Do not change primary validation from `GroupKFold`.
+- Do not use centered/future GR features until explicitly decided that future logs are allowed.
+- Do not submit TCN solo while full CV is worse than R3/A4.
+
+#### Original A5a Architecture Sketch (partially superseded by phases above)
+
+Architecture:
+- Input: raw `(X, Y, Z, GR, MD)` → diff(1,2) + lag(1,2,3,5) + rolling(3,5,10) = ~50 features per timestep.
+- Model: `TCNBlock` × N layers with dilation 2^i, residual connections, `Chomp1d` for causal guarantee. Channels: `[32, 64, 128]`, kernel=5, dropout=0.1 (per fixed control config).
+- Target: delta from `last_tvt_input` (same residual approach as R3).
+- Loss: MSE; `SmoothL1Loss` as option (Phase 5).
+- Training: AdamW, early stopping patience=4.
+- Validation: GroupKFold 5 by well_id.
+- GPU: CUDA + AMP, batch=2048 or 4096.
+
+Scope (existing, to be refined per phases):
+- `src/rogii/sequence_features.py` — `build_sequence_features(df)`.
+- `src/rogii/sequence_data.py` — `WellSequenceDataset`, windowing per well.
+- `src/rogii/tcn_model.py` — `TCNModel`, causal conv1d blocks.
+- `src/rogii/train.py` — `train_tcn()`.
+- `src/rogii/predict.py` — `run_predict_tcn()`.
+- `src/rogii/model_io.py` — TCN serialization.
+- `scripts/run_train.py` — `--model-type tcn`.
+- `scripts/run_predict.py` — auto-detect TCN payload.
+- `configs/a5_tcn.yaml` — TCN config.
+- `requirements.txt` — `torch`.
+
+Verification:
+- `python -m pytest tests/test_sequence_features.py` — causal, shape.
+- `python -m pytest tests/test_tcn_model.py` — causal guarantee, forward pass.
+- `python -m pytest tests/test_tcn_pipeline.py` — smoke train/predict/I/O.
+- `python scripts/run_train.py --model-type tcn --config configs/a5_tcn.yaml --data-dir data --save-oof` — full 5-fold CV.
 
 Promotion gate:
+- Full CV RMSE `<= 14.0` OR blend improves active baseline.
+- TCN is causal (verified by test).
+- Runtime < 30 min full train on local GPU.
 
-- Promote only if ensemble OOF improves over the best single model and Kaggle runtime remains acceptable.
+### Stage A5b: Physics-Based Standalone Predictors
+
+Goal: implement Beam Search and Particle Filter as independent TVT predictors (NOT as tabular features), to be blended with ML model in A5c.
+
+**Why:** B1 confirmed beam search adds signal (beam_std was #2 feature by importance) but LightGBM cannot extract it — it cannibalized X/Y/Z importance. As a standalone predictor blended with model output, beam/PF avoid this zero-sum redistribution. Leader ensemble (plagiagia v2.8): `0.5×HGB + 0.25×Beam + 0.25×PF`.
+
+Scope:
+- `src/rogii/beam_predictor.py` — `predict_beam(gr_hidden, tw_tvt, tw_gr, start_tvt, n_configs=7)` → `np.ndarray` of TVT predictions.
+  - Reuses existing `_beam_jit` from `src/rogii/beam_search.py`.
+  - Multiple configs (move_cost, emit_scale) → averaged consensus.
+- `src/rogii/particle_filter.py` — `predict_pf(hw_df, tw_tvt, tw_gr, n_particles=250)` → `np.ndarray` of TVT predictions.
+  - N=250 particles, velocity decay 0.993, GR likelihood sigma=30.
+  - Causal only: prediction at row i uses only rows 0..i.
+- OOF evaluation: both predictors evaluated on same GroupKFold 5 folds as ML model.
+- `tests/test_physics_predictors.py` — causal verification, standalone RMSE on synthetic data.
+
+Primary files: `src/rogii/beam_predictor.py`, `src/rogii/particle_filter.py`, `tests/test_physics_predictors.py`.
+
+Promotion gate:
+- Standalone predictor RMSE < 30 (vs model RMSE ~14).
+- Beam/PF predictions causal (verified by test).
+- Runtime < 5 min full train (CPU, Numba JIT).
+
+### Stage A5c: Multi-Strategy Ensemble
+
+Goal: blend R3 (LightGBM) + A5a (TCN) + A5b (Beam/PF) OOF predictions via Ridge stacking or weighted averaging.
+
+Scope:
+- `src/rogii/ensemble.py` — `stack_ridge(oof_paths, alpha=1.0)` / `blend_weighted(oof_paths, weights)`.
+  - Load OOF DataFrames from A5.0 → align by (well_id, row_idx) → fit Ridge / grid search weights.
+  - Output: ensemble weights / Ridge coefficients saved as JSON.
+- `scripts/run_ensemble.py` — CLI: `--oof-dir outputs/oof/ --method ridge --output weights.json`.
+- `scripts/run_predict.py` — `--ensemble-weights weights.json` to apply ensemble at prediction time.
+
+Primary files: `src/rogii/ensemble.py`, `scripts/run_ensemble.py`, `tests/test_ensemble.py`.
+
+Promotion gate:
+- Ensemble CV < best single-model CV by > 0.3 RMSE.
+- All OOF artifacts validated for no target leakage.
+
+### Stage A5d: Hyperparameter Optimization (optional, post-A5c)
+
+Goal: fine-tune winning architecture from A5a-A5c via Optuna.
+
+Scope:
+- `src/rogii/hpo.py` — Optuna studies for TCN (channels, lr, dropout, weight_decay) and LightGBM (num_leaves, subsample, reg_alpha/lambda).
+- `configs/a5_hpo.yaml` — HPO config with Optuna trials, pruning, 3-fold CV for speed.
+
+Dependencies: `optuna` (new, lightweight, CPU-friendly).
+
+---
+
+## Stage A6 (future): CatBoost + XGBoost for Ensemble Diversity
+
+Status: **Deferred until A5c produces first ensemble.** If TCN + LightGBM ensemble yields CV < 11 but still > 10, add CatBoost (Ordered Boosting for grouped data) and XGBoost as additional ensemble members for diversity.
+
+---
 
 ## Stage B1: Beam Search Stratigraphic Alignment
 
@@ -400,6 +702,9 @@ The model has already extracted all useful signal from spatial coordinates and G
 | **Slope baseline (B2b)** | **Rejected** | Best CV 14.16 (slope_recent) flat vs R1. slope_md CV 284, wls CV 130. TVT-vs-MD trend does not extrapolate after PS — wells change direction. |
 | **Formation Plane KNN (B3)** | **Rejected** | CV 14.99 (+0.80 vs R1). fp_knn_mean_dist #5 feature but cannibalizes X/Y/Z (35% importance from spatial coordinates). Well-level formation imputation via KNN adds no net signal. |
 | **Z-Drift Physics (PrP2)** | **Not promoted** | CV 14.20 (flat vs R1 14.19, +0.01). 3 TVT-Z coupling features. Only offset_at_anchor is new signal; implied_tvt = Z+const, implied_tvt_resid = dz_since_ps (r=1.0). Fold inconsistency: fold 2 -0.80, fold 3 +0.62. Code kept behind include_z_drift flag. |
-| **1D CNN sequence model** | **Deferred for A4+** | Architecture diversity, not feature; revisit after tabular ceiling |
-| **Multi-seed LGBM + CatBoost + stacking** | **Deferred for A4+** | Cosmetic ensemble on same features |
+| **1D CNN / TCN sequence model** | **Planned as A5a** | Leader analysis: TCN/CNN with causal convolutions on raw coordinates is the single biggest gap vs top solutions (LB 5.99–7.5). |
+| **Beam Search + Particle Filter as predictors** | **Planned as A5b** | Leader analysis: beam/PF work as independent predictors blended with ML, NOT as tabular features. B1 proved features degrade; blend approach is architecturally different. |
+| **Multi-model ensemble (LGBM+TCN+Beam+PF)** | **Planned as A5c** | Requires OOF infrastructure (A5.0) + diverse strategies (A5a, A5b). Leader pattern: 3+ independent strategies blended. |
+| **Multi-seed LGBM + CatBoost + stacking** | **Superseded by A5** | Multi-seed promoted as R3. CatBoost deferred to A6 — lower priority than TCN for architecture diversity. |
+| **Optuna HPO** | **Planned as A5d** | Lightweight dependency. Execute after A5c if ensemble CV < 10 to squeeze final 0.1–0.5. |
 | **PoP2: 3-Strategy Blend** | **Rejected** | CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak predictors — blending degrades model. Code kept behind `--postprocess-blend` flag. |

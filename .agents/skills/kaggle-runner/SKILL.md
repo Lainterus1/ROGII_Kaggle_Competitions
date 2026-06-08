@@ -41,14 +41,14 @@ All procedures use placeholders. The actual values are defined here — a single
 | Placeholder          | Current value                              |
 |----------------------|--------------------------------------------|
 | `<inference-kernel>` | `daniilgonchar/00-rogii-inference-r1`      |
-| `<repo-dataset>`     | `daniilgonchar/rogii-repo-v2`              |
-| `<model-dataset>`    | `daniilgonchar/rogii-models-v2`            |
+| `<repo-dataset>`     | `daniilgonchar/rogii-repo-<slug>` (candidate-specific) |
+| `<model-dataset>`    | `daniilgonchar/rogii-models-<slug>` (candidate-specific) |
 | `<model-file>`       | `baseline_lgbm.pkl`                         |
 | `<competition>`      | `rogii-wellbore-geology-prediction`         |
 | `<kernel-meta-dir>`  | `notebooks`                                 |
 
-To change a dataset or kernel name, update this table and the corresponding
-`kernel-metadata.json`. All commands below use only the placeholders.
+Each candidate gets its own `<repo-dataset>` and `<model-dataset>`.
+Do NOT reuse across candidates.
 
 ## Offline submit flow (ADR-013)
 
@@ -70,30 +70,61 @@ Works for any kernel — R1 fallback or new stage.
    ```
 9. Record LB score in `docs/EXPERIMENT_LOG.md` only after available.
 
-## How to update `<repo-dataset>`
+## How to create a repo dataset for a candidate
 
 The repo dataset contains the full repository as individual files with
-directory structure (e.g. `scripts/run_predict.py`, `src/rogii/smoothing.py`).
+directory structure (e.g. `scripts/run_predict.py`, `src/rogii/train.py`).
 
-**This structure can ONLY be created or updated through Kaggle notebook
-output.** There is no CLI-only way. The Kaggle API (`kaggle datasets version`)
-cannot preserve directory structure — it either skips subdirectories or
-converts them to archives. Both result in a broken dataset.
+**Use `kagglehub.dataset_upload`.** It preserves directory structure when
+Kaggle extracts files server-side. The "creating a zip archive" message
+during upload is misleading — paths are preserved.
 
-### Correct way
+**Do NOT use `kaggle datasets version -p` or `kaggle datasets create -p`.**
+They skip subdirectories and break the dataset.
 
-1. Push code changes to GitHub.
-2. Open `02_kaggle_update_repo.ipynb` on Kaggle (internet ON).
-3. Run it → clones latest code from GitHub.
-4. Save notebook output as a new version of `<repo-dataset>`:
-   Kaggle UI → **Save Version** → **Create Dataset** → select existing `<repo-dataset>`.
+### Procedure (fully automated, no Kaggle UI)
 
-### When to update
+```python
+import kagglehub, os, shutil, subprocess
 
-Only when `src/`, `scripts/`, `configs/` or `requirements.txt` have changed
-AND the change is needed at inference time (new module, new CLI flag,
-new dependency). If only the notebook cell changed, no dataset update needed —
-the notebook is pushed via `kaggle kernels push` separately.
+repo_root = "/path/to/project"
+tmp_dir = os.path.join(os.environ.get("TEMP", "/tmp"), "repo-upload")
+if os.path.exists(tmp_dir):
+    shutil.rmtree(tmp_dir)
+os.makedirs(tmp_dir)
+
+# Copy only git-tracked files (no data/, models/, outputs/, *.pkl)
+result = subprocess.run(["git", "ls-files"], capture_output=True, text=True, cwd=repo_root)
+for f in result.stdout.strip().split("\n"):
+    if not f:
+        continue
+    dst = os.path.join(tmp_dir, f)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(os.path.join(repo_root, f), dst)
+
+# Upload — Kaggle extracts the zip server-side, paths preserved
+kagglehub.dataset_upload(
+    handle="daniilgonchar/rogii-repo-<candidate-slug>",
+    local_dataset_dir=tmp_dir,
+    version_notes="commit message or change description"
+)
+```
+
+### Verification (mandatory)
+
+```bash
+kaggle datasets files daniilgonchar/rogii-repo-<candidate-slug>
+```
+
+Must show files with full paths: `src/rogii/train.py`, `scripts/run_predict.py`.
+If only flat file names appear (no slashes), the dataset is broken. Re-upload.
+
+### When to create
+
+For every candidate where `src/`, `scripts/`, `configs/` or `requirements.txt`
+changed AND the change is needed at inference time. Create a NEW dataset
+(`rogii-repo-<slug>`) — never overwrite an existing one. If code has not
+changed since the last candidate, reuse the same repo dataset.
 
 ## Stable contract — do NOT modify
 
@@ -137,10 +168,10 @@ Use this flow for any new model or non-trivial code change. Do not overwrite
 fallback kernel or model dataset unless explicitly asked.
 
 | Artifact | Rule |
-|---|---|
-| Repo dataset | If `src/`, `scripts/`, `configs/` or `requirements.txt` changed AND needed at inference: update `<repo-dataset>` via the 02 notebook (Kaggle, internet ON). |
-| Model dataset | Use a candidate-specific dataset, e.g. `<owner>/rogii-models-<stage-slug>`, containing the trained model file. |
-| Dependency dataset | If inference imports packages not available offline, create a candidate-specific wheels dataset, e.g. `<owner>/rogii-wheels-<stage-slug>`. |
+|---|---|---|
+| Repo dataset | Create candidate-specific: `daniilgonchar/rogii-repo-<slug>` via `kagglehub.dataset_upload()`. Never reuse for different candidates. |
+| Model dataset | Candidate-specific: `daniilgonchar/rogii-models-<slug>`, containing `baseline_lgbm.pkl`. |
+| Dependency dataset | If inference needs packages not available offline, create `daniilgonchar/rogii-wheels-<slug>`. |
 | Kernel metadata | Use candidate-specific kernel metadata and slug (see "New stage = new kernel" above). |
 | Submit command | Standard kernel-version submit with `-k`, `-v` and `-f submission.csv`. |
 
@@ -162,25 +193,15 @@ Candidate steps:
 
 Direct `kaggle competitions submit -f <submission.csv>` can return `400 Bad Request` for this code competition. Use kernel-version submit with `-k`, `-v` and `-f submission.csv`.
 
-## One-time setup (in Kaggle)
+## Dataset creation summary
 
-Only needed when rebuilding datasets manually:
-
-| Notebook | Purpose | Internet |
+| Dataset type | Method | Tool |
 |---|---|---|
-| `02_kaggle_update_repo` | Clone GitHub repo, then create/update `<repo-dataset>` | ON |
-| `01_kaggle_train` | Train stable model and create/update `<model-dataset>` with `<model-file>` | ON |
-| Inference kernel | Offline inference and code-competition submit | OFF |
+| Repo (multi-file, dirs) | `kagglehub.dataset_upload(handle, local_dir)` | Python |
+| Model (single .pkl file) | `kaggle datasets create -p <dir>` | CLI |
+| Dependency (wheels) | `kaggle datasets create -p <dir>` | CLI |
 
-1. Keep Kaggle notebooks thin: clone repo, run scripts.
-2. Put reusable logic in `src/rogii/` or `scripts/`, not notebook cells.
-3. Write outputs to `/kaggle/working`.
-4. Do not require GitHub auth, tokens or Kaggle Secrets for cloning the public repo.
-5. Ensure notebook commands match pushed repository files.
-6. `src/rogii/kaggle_runtime.py` owns marker-based path discovery; do NOT reintroduce hardcoded paths.
-7. `00_kaggle_inference.ipynb` must fail loudly if repo/model/data cannot be found or if `submission.csv` is missing/empty.
-8. Submit only after explicit user approval.
-9. For new candidates, keep artifact slugs explicit in the completion report: repo dataset, model dataset, dependency dataset, kernel slug and submitted version.
+Always verify with `kaggle datasets files <dataset>` after creation.
 
 ## Documentation updates
 
@@ -219,11 +240,12 @@ Only needed when rebuilding datasets manually:
 - Do not implement scheduled or approval-free Kaggle submission.
 - Do not submit to Kaggle without explicit user approval.
 
-- Do NOT try to update `<repo-dataset>` via `kaggle datasets version` with
-  tar, zip, or flat directories. The CLI cannot preserve directory structure.
-  This WILL break the dataset (corrupted/missing files).
+- Do NOT use `kaggle datasets version -p` or `kaggle datasets create -p`
+  for multi-file repo datasets. They skip subdirectories and WILL break
+  the dataset. Use `kagglehub.dataset_upload()` instead.
 
-- Do NOT create new dataset slugs to work around upload limitations.
+- Do NOT overwrite an existing repo dataset. Each candidate must create
+  its own repo dataset (`rogii-repo-<slug>`) to avoid breaking fallbacks.
 
 - Do NOT change `<repo-dataset>` or `<model-dataset>` references in
   `kernel-metadata.json` unless the dataset itself was intentionally

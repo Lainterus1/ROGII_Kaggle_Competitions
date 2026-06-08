@@ -164,6 +164,7 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 
 ## Unknown commands or paths
 
+- `kagglehub.dataset_upload()` is the correct Python tool for creating Kaggle datasets with directory structure. `kaggle datasets version -p` (CLI) skips subdirectories — never use it for repo datasets.
 - Kaggle Evaluation page wording: still needs cross-check when accessible.
 - Full feature contract: still needs deeper inventory and leakage review before first ML baseline.
 - Model training commands: scaffolded but not implemented yet.

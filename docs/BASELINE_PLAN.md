@@ -26,7 +26,8 @@ Baseline sequence, model scope, feature safety rules, acceptance criteria and fu
 Baseline status:
 
 - Stage 4 is frozen as the reference baseline.
-- **R2** = R1 model (18 tabular features, residual target) + Savgol w=31 p=2 post-processing — **canonical active baseline** (OOF 14.21, LB 12.239).
+- **R3** = 3-seed ensemble [42,7,123] (18 tabular features, residual target) + Savgol w=31 p=2 — **canonical active baseline** (CV 14.052, LB 12.177).
+- R2 = R1 model + Savgol w=31 p=2 (OOF 14.21, LB 12.239).
 - R1 = raw 18-feature LightGBM model without post-processing (OOF 14.22, LB 12.247).
 - Future improvement planning has moved to `docs/ROADMAP.md`.
 - Do not rewrite the recorded Stage 4 result when experimenting with new feature sets or models; log new runs separately in `docs/EXPERIMENT_LOG.md`.

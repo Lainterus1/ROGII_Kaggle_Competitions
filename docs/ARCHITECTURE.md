@@ -106,7 +106,7 @@ Optional later dependencies must be justified before adding.
 - Kaggle submissions require explicit user approval; after approval, an agent may submit a validated kernel version through the Kaggle CLI/API.
 - Local MLflow uses `mlruns/`; Kaggle may use `/kaggle/working/mlruns`.
 - Kaggle training/update notebooks can clone the public repo without GitHub auth or Kaggle Secrets.
-- Kaggle offline inference uses `rogii-repo-v2` and `rogii-models-v2` Datasets with internet OFF and versioned kernel metadata.
+- Kaggle offline inference uses a repo dataset and a model dataset with internet OFF and versioned kernel metadata. Each candidate gets its own repo dataset created via `kagglehub.dataset_upload()`.
 
 ## Architecture risks
 

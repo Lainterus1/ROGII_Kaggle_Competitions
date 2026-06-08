@@ -54,9 +54,24 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Rejected | High | Stage A3b.2: derivative dTVT/dMD target — CV 14.32 (+0.19), integration error accumulation |
 | Rejected | High | Geology v1 (well-level): CV 14.57 (+0.44 vs A2a), signal unstable across folds |
 | Not promoted | High | Geology v2 (per-row GR z-scores): CV 14.17 (−0.04 flat vs A2a), code kept |
-| Deferred | Medium | 1D CNN sequence model — architecture diversity, revisit after tabular ceiling |
-| Deferred | Medium | Multi-seed LGBM + CatBoost + Ridge stacking — cosmetic ensemble on same features |
-| Deferred | Medium | Stage A4: standardize OOF artifacts, add multi-seed LGBM, CatBoost and stacking |
+| Superseded | Medium | 1D CNN sequence model — replaced by TCN in A5a |
+| Superseded | Medium | Multi-seed LGBM + CatBoost + Ridge stacking — multi-seed promoted as R3, CatBoost deferred to A6 |
+| Superseded | Medium | Stage A4: standardize OOF artifacts — replaced by A5.0 OOF infrastructure |
+| Planned | High | **Stage A5.0**: implement OOF infrastructure — `src/rogii/oof.py`, `TrainResult.oof_df`, `--save-oof` CLI flag |
+| Done | High | **Stage A5a v0**: TCN raw implementation — `sequence_features.py`, `sequence_data.py`, `tcn_model.py`, `train_tcn()`, `predict_tcn()`, `configs/a5_tcn.yaml`, `torch` in `requirements.txt`, `--model-type tcn` in CLI, AMP support |
+| Done | High | **Stage A5a v0**: TCN tests — `test_sequence_features.py`, `test_tcn_model.py`, `test_tcn_pipeline.py` |
+| Done | High | **A5a Phase 0 (Diagnostics)**: TCN OOF by fold/position/well_length, prediction variance, RMSE by `frac_after_ps`, TCN vs LGBM OOF. Created `src/rogii/diagnostics.py`, `scripts/diagnose_tcn.py`, `tests/test_diagnostics.py` (14 tests). OOF contract + `fold` column. Key findings: RMSE 7.2→20.0 monotonic, std_ratio 0.42 flattening, error corr 0.76. Priority re-ranked: P2→P3→P4→P1→P5→P6. |
+| Done | High | **A5a Fixed Control Config**: run `channels=[32,64,128] window=64 kernel=5 lr=3e-4` — CV 15.03 (4 folds, fold 5 aborted), OOF saved to `outputs/oof/a5_tcn_control_tcn_oof.parquet` |
+| Done | High | **A5a Phase 2 (#1 priority)**: dual input normalization — per-well normalized (65 cols) + global-standardized absolute X/Y/Z/MD (4 cols). Fold-local `StandardScaler` fit on train folds only, final scaler saved in `tcn_metadata["x_scaler"]`, `predict_tcn()` applies saved scaler via `input_scaler` param. `tcn_input_size` stored in payload. `WellSequence.X_abs` added. 6 tests (2 new, 4 modified). Target: std_ratio 0.42 → >0.7. |
+| Planned | High | **A5a Phase 3 (#2 priority)**: R1 sequence channels — PS geometry, local trajectory, GR stable features, anchor/baseline, position masks. All causal/test-available, leakage audit. Target: screening folds close to 14.2–14.5. |
+| Planned | High | **A5a Phase 4 (#3 priority)**: unified TCN eval path — extract common CV/eval logic, `tune_tcn.py` delegates to evaluator, `run_train.py` uses same evaluator, TCN OOF saved. Fixes fold 5 abort. |
+| Planned | Low | **A5a Phase 1 (deprioritized)**: full-well `WellSequence` with target only on post-PS, window ending at target row, left-padding for short context, same windowing in `predict_tcn()`. Correctness fix — early post-PS rows already best (RMSE 7.2). |
+| Planned | Medium | **A5a Phase 5 (Verify Loss)**: MSE baseline, `SmoothL1Loss` option, RMSE in TVT/delta scale, prediction dispersion check |
+| Planned | Medium | **A5a Phase 6 (Postprocess & Blend)**: TCN OOF saved, Savgol/clipping on TCN OOF, LGBM vs TCN error correlation, weighted blend LGBM+TCN OOF |
+| Planned | Medium | **Stage A5b**: implement standalone Beam/PF predictors — `beam_predictor.py`, `particle_filter.py`, OOF evaluation |
+| Planned | Medium | **Stage A5c**: implement ensemble — `src/rogii/ensemble.py`, `scripts/run_ensemble.py`, Ridge stacking + weighted blending |
+| Planned | Low | **Stage A5d**: Optuna HPO for TCN + LightGBM hyperparameters |
+| Planned | Low | **Stage A6**: CatBoost + XGBoost for ensemble diversity |
 | Done | High | Split Kaggle runner into separate training and inference notebooks (ADR-007) |
 | Done | High | Repair R1 offline Kaggle inference workflow: marker-based path discovery, kernel metadata, version 3 output validation |
 | Done | High | Generalize Kaggle workflow docs for A2a and future candidate builds with separate model/dependency/kernel artifacts |

@@ -1,6 +1,6 @@
 {
-  "id": "daniilgonchar/00-rogii-inference-a4-multiseed",
-  "title": "00 - ROGII Inference (A4 Multi-Seed)",
+  "id": "daniilgonchar/00-rogii-inference-a4-v3",
+  "title": "00 - ROGII Inference A4 v3",
   "code_file": "00_kaggle_inference.ipynb",
   "language": "python",
   "kernel_type": "notebook",
@@ -8,7 +8,7 @@
   "enable_gpu": "false",
   "enable_internet": "false",
   "dataset_sources": [
-    "daniilgonchar/rogii-repo-v2",
+    "daniilgonchar/rogii-repo-a4",
     "daniilgonchar/rogii-models-a4-multiseed"
   ],
   "competition_sources": [
