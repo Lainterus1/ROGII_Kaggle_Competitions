@@ -16,6 +16,17 @@
 - `python -m pytest tests` - 210 passed.
 - `python scripts/tune_tcn.py --folds all` - best tuned small TCN CV `15.036 ± 0.848`.
 
+## 2026-06-08 - Documentation state refresh
+
+### Changed
+- Synchronized README and source-of-truth docs with the current active baseline: R3 3-seed LightGBM + Savgol, CV `14.052`, LB `12.177`.
+- Updated data, validation, architecture, roadmap, task, experiment, risk and decision docs to reflect implemented A5 TCN/OOF/diagnostics work and pending Phase 2 training gate.
+- Marked stale A2a/R2 references as historical or superseded where applicable.
+
+### Verification
+- `git diff --check` - no whitespace errors.
+- `python -m pytest tests` - 226 passed, 105 PyWavelets boundary-effect warnings.
+
 ## 2026-06-07 - OpenCode project guard hooks
 
 ### Added

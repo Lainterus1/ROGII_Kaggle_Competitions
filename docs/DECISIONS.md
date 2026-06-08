@@ -152,7 +152,7 @@ The Kaggle notebook is configured with internet enabled and competition data att
 ## ADR-003: Freeze Stage 4 baseline and create post-baseline roadmap
 
 Date: 2026-06-05
-Status: Accepted
+Status: Accepted (implemented); historical — Stage 4 baseline superseded by R1/R2/R3
 
 ### Context
 
@@ -436,7 +436,7 @@ Stage A4 (Roadmap) planned multi-seed LightGBM averaging: train N models with di
 - Model payload size increases linearly with seeds.
 
 #### Follow-up
-- Test on Kaggle LB: expected gain 0.1-0.3 RMSE.
+- Tested on Kaggle LB: multi-seed + Savgol promoted as R3 with LB `12.177` (`53440641`), improving by `0.062` vs R2.
 - 9 new tests in `tests/test_train.py`, `tests/test_model_io.py`, `tests/test_validation_split.py`.
 
 ## ADR-021: StratifiedGroupKFold Validation Strategy
@@ -547,7 +547,7 @@ The Savgol smoothing code already existed in `src/rogii/smoothing.py` (ADR-015, 
 - Ran `inspect_tvt_range.py` → clip bounds p0.1-p99.9 = [9851.80, 12860.23].
 - Ran `run_train --eval-postproc` → Savgol w=31 p=2 best OOF RMSE 14.2123 vs raw 14.2187 (−0.0064). All Savgol configs beat raw. Clipping degrades (14.2208, +0.002).
 - Ran `visualize_postproc.py` → 3/3 wells improved, raw max jumps 1.6-4.1 ft (noise, not geology), continuity excellent.
-- **Kaggle LB `53428554`: 12.239** — −0.008 vs R1 (12.247). Improvement confirmed on both CV and LB. OOF→LB gap −1.97 (consistent with R1 −1.94). **Savgol w=31 p=2 is now the active baseline — designated as R2 pipeline (R1 model + Savgol).**
+- **Kaggle LB `53428554`: 12.239** — −0.008 vs R1 (12.247). Improvement confirmed on both CV and LB. OOF→LB gap −1.97 (consistent with R1 −1.94). Savgol w=31 p=2 was designated as R2 pipeline (R1 model + Savgol) and is now superseded by R3 multi-seed + Savgol (LB 12.177).
 - Updated defaults: window=31, polyorder=2.
 
 ## ADR-014: B1 Beam Search rejected — typewell alignment adds no net signal
@@ -613,7 +613,7 @@ Root cause: TVT-vs-MD trend in the known zone does NOT linearly continue into th
 - Code kept in `src/rogii/baseline.py` (5 methods via `compute_baseline()`) and `src/rogii/smoothing.py` (Savgol per-well smoothing).
 - `baseline_method` added to model payload v2 contract. Existing models default to `"flat"` for backward compatibility.
 - `--baseline-method` CLI flag available in `run_train.py` and `run_predict.py`.
-- Savgol smoothing (`--savgol-smooth`) available as post-processing in `run_predict.py` (not yet tested on real predictions — may provide marginal noise reduction independently of baseline method).
+- Savgol smoothing (`--savgol-smooth`) is available as post-processing in `run_predict.py` and was validated by PrP3: `w=31 p=2` improved both OOF and LB marginally.
 - 10 new tests in `tests/test_baseline.py`. 132 tests total pass.
 - The flat baseline (`last_tvt_input`) remains the optimal residual base for this problem.
 
@@ -648,10 +648,10 @@ FP features (especially `fp_knn_mean_dist` #5 at 5.0%, `fp_nearest_dist` #6 at 4
 - Tabular ceiling at CV ~14.1 and LB ~12.2 is now strongly confirmed.
 - Remaining path: architecture change (CNN, ensemble) — A4+ deferred stages.
 
-## ADR-009: A2a DWT promoted as active baseline
+## ADR-009: A2a DWT CV promotion superseded after LB inversion
 
 Date: 2026-06-05  
-Status: Accepted
+Status: Accepted, superseded by R1/R2/R3 after Kaggle LB
 
 ### Context
 
@@ -659,13 +659,13 @@ Stage A2a added causal GR DWT features (PyWavelets db4, trailing window 256): `g
 
 ### Decision
 
-Promote A2a as active baseline. CV 14.13 vs R1 14.19 (+0.06). Feature flag `include_gr_dwt` integrated into payload contract.
+Initially promote A2a on local CV: 14.13 vs R1 14.19 (+0.06). Feature flag `include_gr_dwt` integrated into payload contract. After Kaggle submission, do not keep it as active baseline because LB worsened to 12.558 vs R1 12.247.
 
 ### Consequences
 
-- Active baseline: 20 features (6 base + 9 geometry + 3 GR + 2 DWT).
+- Historical A2a feature set: 20 features (6 base + 9 geometry + 3 GR + 2 DWT).
 - Marginal CV improvement; DWT is a better GR filter, not a new information source.
-- Superseded by R1: LB 12.558 worse than R1 12.247 (+0.311). DWT does not generalize. R1 remains active baseline.
+- Superseded by R1/R2/R3: LB 12.558 worse than R1 12.247 (+0.311). DWT does not generalize. Code remains available behind `include_gr_dwt` for controlled experiments.
 
 ## ADR-010: A3 DTW, signed-log, derivative — all rejected
 
@@ -714,11 +714,11 @@ Status: Accepted
 
 ### Decision
 
-Acknowledge tabular feature ceiling at CV ~14.13 for LightGBM with features derived from X, Y, Z, GR, TVT_input. Further improvement requires architectural diversity (CNN for sequence modeling) or ensemble methods.
+Acknowledge tabular feature ceiling at CV ~14.13 for LightGBM with features derived from X, Y, Z, GR and pre-PS `TVT_input` anchors. Further improvement requires architecture diversity (currently A5 TCN/OOF) or ensemble methods.
 
 ### Consequences
 
-- Active feature development paused. Focus shifts to A4+: CNN, multi-model ensemble.
+- New tabular feature development is deprioritized. Focus shifts to A5: TCN, OOF diagnostics and future multi-strategy ensemble work.
 - Existing feature flags preserved for future compound experiments.
 
 ## ADR-013: Metadata-driven offline Kaggle inference submit
@@ -732,11 +732,11 @@ Kaggle Submit reruns code with internet OFF. The previous `00-rogii-inference-r1
 
 ### Decision
 
-- Keep the active recovery path as R1 inference with `rogii-repo-v2` and `rogii-models-v2` until A2a offline dependencies are packaged.
+- Keep the stable recovery path as R1 inference with `rogii-repo-v2` and `rogii-models-v2`; do not overwrite it for new candidates.
 - Use marker-based Kaggle path discovery: repo root must contain `scripts/run_predict.py` and `src/rogii`; data root must contain `sample_submission.csv` and `test/`; model path is selected by `baseline_lgbm.pkl` with a preference for `rogii-models-v2`.
 - Store `notebooks/kernel-metadata.json` so the inference kernel can be updated with `kaggle kernels push -p notebooks` and fixed inputs/internet settings.
 - Submit through Kaggle's code-competition kernel-version mode after explicit approval: `kaggle competitions submit -k <kernel> -v <version> -f submission.csv`.
-- Treat R1 as the recovery/fallback submit path. Candidate builds such as A2a must use explicit candidate artifacts: repo dataset, model dataset, dependency dataset when needed, kernel metadata and kernel slug.
+- Treat R1 as the recovery/fallback submit path. Candidate builds such as A2a, A4/R3 and future A5 variants must use explicit candidate artifacts: repo dataset, model dataset, dependency dataset when needed, kernel metadata and kernel slug.
 - If a candidate needs packages unavailable in internet-OFF submit reruns, package them as an attached offline dependency dataset instead of relying on `pip install` from the internet.
 
 ### Consequences
@@ -744,7 +744,8 @@ Kaggle Submit reruns code with internet OFF. The previous `00-rogii-inference-r1
 - Offline R1 inference no longer depends on fragile dataset nesting or manual notebook cell edits.
 - The kernel output is validated before submission and fails loudly if `submission.csv` is missing or empty.
 - Direct file submission remains unsupported for this competition; kernel-version submit is the supported agent path.
-- A2a DWT submission is now unblocked: `pywavelets` packaged as offline dependency dataset `rogii-wheels-a2a-dwt`; kernel `00-rogii-inference-a2a-dwt` v1 validated.
+- A2a DWT submission is unblocked but not promoted: `pywavelets` packaged as offline dependency dataset `rogii-wheels-a2a-dwt`; kernel `00-rogii-inference-a2a-dwt` v1 validated; LB worsened vs R1.
+- R3/A4 multi-seed candidate uses `notebooks/kernels/a4-multiseed/`, kernel `00-rogii-inference-a4-v3`, repo dataset `rogii-repo-a4` and model dataset `rogii-models-a4-multiseed`.
 - New candidates can follow the same systematic flow without changing R1 fallback artifacts.
 
 ## ADR-017: PrP2 Z-Drift Physics Features Not Promoted
@@ -864,8 +865,8 @@ The Kaggle CLI (`kaggle datasets version -p`) SKIPS subdirectories and breaks mu
 
 #### Follow-up
 
-- Remove all references to manual notebook-based dataset creation from skills and docs.
-- Add `kagglehub` to project dependencies if not already present.
+- Manual notebook-based repo dataset creation is superseded for candidate builds; candidate repo datasets should use `kagglehub.dataset_upload()`.
+- `kagglehub` is a local packaging/tooling dependency, not a project runtime dependency in `requirements.txt`.
 
 ## ADR-023: Strategic shift from feature engineering to architecture diversity
 
@@ -891,10 +892,10 @@ Methods observed across top 20 leaderboard solutions:
 
 | Capability | Leaders | We have | Action |
 |---|---|---|---|
-| Sequence model (TCN/CNN) | Yes | No | A5a |
+| Sequence model (TCN/CNN) | Yes | TCN v0 + Phase 2 dual normalization implemented, not promoted | A5a |
 | Physics predictors (Beam/PF) | Yes, as predictors | Yes, as features → degraded | A5b (repurpose) |
 | Multi-strategy ensemble | Yes (3+ strategies) | Multi-seed LGBM only | A5c |
-| OOF infrastructure | Implicit | In-memory only | A5.0 |
+| OOF infrastructure | Implicit | Implemented for current training paths | A5.0 done; extend for ensembles |
 
 ### Root Cause of B1 Failure
 
@@ -906,7 +907,7 @@ Stage B1 (Beam Search as LightGBM features) degraded CV to 14.43 because beam-de
 - **Adopt architecture-diversity roadmap (Stage A5):** OOF infrastructure → TCN sequence model → standalone physics predictors → multi-strategy ensemble → optional HPO.
 - **Dependency `torch` is approved** for GPU sequence model training. GPU available locally.
 - **Dependency `catboost` deferred to A6** — lower priority than TCN for architecture diversity.
-- **No `weight` column** in competition data (DATA_MAP confirms 8 columns: MD,X,Y,Z,ANCC,ASTNU,ASTNL,EGFDU,EGFDL,BUDA,TVT,GR,TVT_input) — plain MSE loss, not weighted.
+- **No `weight` column** in competition data (DATA_MAP confirms train horizontal columns include MD, X, Y, Z, formation columns, TVT, GR and TVT_input) — plain MSE loss, not weighted.
 
 ### Consequences
 
@@ -925,9 +926,9 @@ Stage B1 (Beam Search as LightGBM features) degraded CV to 14.43 because beam-de
 
 #### Follow-up
 
-- Implement A5.0 (OOF infrastructure) first as gate for A5a-A5c.
-- Implement A5a (TCN) as highest priority.
-- Re-evaluate after TCN CV result: if CV < 12, continue A5b-A5c; if CV flat, re-analyze.
+- A5.0 OOF infrastructure is implemented.
+- Continue A5a TCN as highest priority; Phase 2 dual normalization needs the full/screening training gate.
+- Re-evaluate after the Phase 2/Phase 3 TCN CV result: if CV improves materially or blend OOF improves R3, continue A5b-A5c; if CV remains flat, re-analyze.
 
 ### Rejected alternatives
 

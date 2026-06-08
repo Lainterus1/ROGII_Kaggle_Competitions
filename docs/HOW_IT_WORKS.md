@@ -1,10 +1,16 @@
-# HOW IT WORKS — R1 Feature Set
+# HOW IT WORKS — R3 Baseline and Feature Set
 
 ## Purpose
 
-Explain every feature in the R1 baseline: what it measures physically, why it was kept, and what the feature importance analysis revealed.
+Explain the active R3 baseline, every retained R1 feature, what each feature measures physically, why it was kept, and what rejected feature blocks taught us.
 
-## Current feature set (18 features, CV RMSE 14.19 ± 0.89)
+## Current active baseline
+
+R3 = 3-seed LightGBM ensemble `[42, 7, 123]` using the 18-feature R1 set, residual target `TVT - last_tvt_input`, and per-well Savgol smoothing `window=31`, `polyorder=2` at prediction time.
+
+Metrics: GroupKFold CV `14.052 ± 0.868`, public LB `12.177`.
+
+## Current feature set (18 features)
 
 ---
 
@@ -16,7 +22,7 @@ Explain every feature in the R1 baseline: what it measures physically, why it wa
 
 **Логика включения:** Базовый ординатный признак. Позволяет модели различать ранние и поздние участки пост-PS секции. `importance: 2.68%` (топ-10).
 
-**Как используется в R1:** Участвует напрямую и как база для производных: `MD_relative`, `md_since_ps`, `dxdmd/dydmd/dzdmd`.
+**Как используется в R3:** Участвует напрямую и как база для производных: `MD_relative`, `md_since_ps`, `dxdmd/dydmd/dzdmd`.
 
 ---
 
@@ -214,7 +220,9 @@ Explain every feature in the R1 baseline: what it measures physically, why it wa
 
 ---
 
-## A2a DWT features (2) — Promoted (+0.06 CV)
+## A2a DWT features (2) — not promoted after LB
+
+**Status:** Local CV improved slightly (`14.13` vs R1 `14.19`), but public LB worsened (`12.558` vs R1 `12.247`). DWT features are implemented behind `include_gr_dwt` but are not part of R3.
 
 ### `gr_dwt_approx` — Low-frequency GR approximation (DWT)
 
@@ -240,8 +248,8 @@ Explain every feature in the R1 baseline: what it measures physically, why it wa
 
 ---
 
-## Ablation summary (что было выброшено и почему)
+## Signal summary
 
-| Удалённый признак | Причина нулевого importance |
+**44% importance приходится на 3 абсолютные координаты (X, Y, Z). Ещё 15% — на `gr_energy`.** Это означает, что задача в текущем табличном подходе в первую очередь решается через пространственную привязку и интегральную характеристику разреза. Тонкие GR-паттерны, лаги, разности, огибающие, DWT, DTW, geology, beam и spatial-KNN признаки либо дублируют уже доступный сигнал, либо не переносятся на LB. Поэтому активное развитие смещено в A5: TCN/OOF/architecture diversity.
 
-**44% importance приходится на 3 абсолютные координаты (X, Y, Z). Ещё 15% — на gr_energy.** Это означает, что задача в первую очередь решается через пространственную привязку и интегральную характеристику разреза. Тонкие GR-паттерны (лаги, разности, огибающие) не несут дополнительного сигнала — весь полезный GR-сигнал уже извлечён через `gr_energy`.
+Полная история удалённых/отклонённых признаков и feature-экспериментов — в `docs/ROADMAP.md` (секции A1-B3, PrP2, PoP2) и `docs/EXPERIMENT_LOG.md`.

@@ -23,16 +23,11 @@ Fold strategy, group split rules, leakage checks, target distribution checks, lo
 
 ## Current content
 
-Default recommendation before data inspection:
+Default validation recommendation:
 
-- Prefer group-aware validation if a well or wellbore identifier exists.
-- Use `GroupKFold` by well/group ID unless data inspection proves another strategy is safer.
-- Do not use row-level random KFold as the primary CV if rows from the same well can leak information.
-
-Preliminary group candidate after light data inspection:
-
-- Use the file prefix before `__horizontal_well.csv` or `__typewell.csv` as the initial well/group ID candidate.
-- Confirm this during full data inventory before finalizing folds.
+- Use group-aware validation by `well_id`, where `well_id` is the file prefix before `__horizontal_well.csv` or `__typewell.csv`.
+- Use 5-fold `GroupKFold` by `well_id` as the primary CV strategy unless a documented decision changes the default.
+- Do not use row-level random KFold as the primary CV because rows from the same well leak trajectory/geology context.
 
 Step 07 naive validation:
 
@@ -52,14 +47,14 @@ Stage 3 ML validation:
 
 Current active baseline validation:
 
-- Active comparison stage: **R2** (R1 model + Savgol w=31 p=2 post-processing).
+- Active comparison stage: **R3** (3-seed LightGBM `[42, 7, 123]` on the R1 18-feature set + Savgol w=31 p=2 post-processing).
 - Strategy: 5-fold `GroupKFold` by `well_id` on post-PS train rows.
 - Target: residual delta `TVT - last_tvt_input`, reconstructed to TVT for submission.
 - Features: 18 features (6 base + 9 geometry + 3 GR), documented in `docs/HOW_IT_WORKS.md`.
-- R1 model OOF CV: `~14.22`, R2 pipeline OOF CV: `~14.21`.
-- Public LB: R1 `12.247`, R2 `12.239`.
+- R1 model OOF CV: `~14.22`, R2 pipeline OOF CV: `~14.21`, R3 GroupKFold CV: `14.052 ± 0.868`.
+- Public LB: R1 `12.247`, R2 `12.239`, R3 `12.177`.
 
-Planned Stage A2 spatial KNN validation contract:
+Implemented Stage A2 spatial KNN validation contract:
 
 - Spatial KNN features must be built fold-aware, not once on the full dataset before CV.
 - For validation fold K, the spatial reference set must contain only wells outside fold K.
@@ -68,6 +63,13 @@ Planned Stage A2 spatial KNN validation contract:
 - Validation wells must never appear in their own KNN tree.
 - Test-time spatial KNN uses train pre-PS reference rows only by default; test pre-PS rows are excluded for a stricter train/test contract.
 - If spatial KNN produces implausibly low CV such as RMSE `2-3`, treat it as leakage until proven otherwise and do not submit.
+
+TCN/A5 validation status:
+
+- TCN uses the same primary 5-fold `GroupKFold` by `well_id`.
+- Phase 0 control (`a5_tcn_control`) completed 4 folds and aborted fold 5; CV was `15.031 ± 1.35` with severe global prediction flattening (`std_ratio 0.42`).
+- Phase 2 dual normalization is implemented and must be validated before further tuning: pass condition is `std_ratio > 0.7` and screening folds better than the Phase 0 control.
+- TCN OOF outputs use `well_id`, `row_idx`, `fold`, `y_true`, `y_pred`, `baseline` and are stored outside Git under `outputs/oof/` when `--save-oof` is used.
 
 Required checks:
 
@@ -78,5 +80,5 @@ Required checks:
 
 ## Open questions
 
-- None for the current roadmap. Default remains 5-fold `GroupKFold` by `well_id`.
-- `StratifiedGroupKFold` (4,5) available as experimental option: `--cv-strategy stratified`. Produces CV mean 13.806 ± 1.522 (vs GroupKFold 14.191 ± 0.887). Higher std may indicate better CV/LB correlation. Not yet promoted to default.
+- Default remains 5-fold `GroupKFold` by `well_id`.
+- `StratifiedGroupKFold` (4,5) is available as an experimental option: `--cv-strategy stratified`. It produced CV mean `13.806 ± 1.522` for single-seed R1 and `13.763 ± 1.523` for multi-seed, but is not promoted to default until CV/LB correlation is validated.

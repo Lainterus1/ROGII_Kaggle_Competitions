@@ -44,7 +44,7 @@ Your job is to build the best possible baseline without inventing data contracts
 1. Read `docs/CONTEXT_MAP.md` before changing unfamiliar parts of the project.
 2. Do not re-ask questions already answered in the dossier or docs.
 3. If target, metric, schema, ID columns or submission contract are unknown, inspect official Kaggle sources and actual data files before implementation.
-4. Treat quick observations as preliminary until `docs/DATA_MAP.md` is produced by the inventory workflow.
+4. Treat new data/schema observations as preliminary until `docs/DATA_MAP.md` is updated by the inventory workflow.
 5. Use public notebooks only as references; document any adopted idea in `docs/PUBLIC_NOTEBOOK_REFERENCES.md` and `docs/DECISIONS.md` when relevant.
 
 ## Work protocol
@@ -73,7 +73,7 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 - Prefer small, explicit functions over abstractions without reuse.
 - Keep notebooks out of core logic.
 - Do not add backward compatibility unless there is a real persisted-data or external-consumer need.
-- Avoid heavy dependencies unless the user approves or the baseline requires them.
+- Avoid heavy new dependencies unless the user approves or the active baseline stage requires them.
 - Document non-obvious leakage or validation decisions close to the code and in docs.
 - Keep generated submissions and model artifacts out of Git.
 
@@ -87,21 +87,18 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 ## Data and leakage rules
 
 - Do not invent schema details.
-- The observed submission columns are `id,tvt`, but the official metric and full contract still require confirmation.
-- Treat file prefixes before `__horizontal_well.csv` and `__typewell.csv` as preliminary well/group ID candidates.
-- `TVT_input` appears in train and test horizontal well files; audit it before using it as a feature.
+- Submission columns are `id,tvt` per `sample_submission.csv`.
+- Use file prefixes before `__horizontal_well.csv` and `__typewell.csv` as `well_id` and the default validation group.
+- `TVT_input` appears in train and test horizontal well files; it is allowed only as the known pre-PS anchor/baseline described by the task deck.
 - Do not use target-like or post-target-derived columns without explicit justification.
-- Prefer group-aware validation if well/group IDs exist.
-- Do not use row-level random KFold as primary validation if rows from the same well can leak across folds.
+- Use group-aware validation by `well_id` by default.
+- Do not use row-level random KFold as primary validation because rows from the same well can leak across folds.
 
 ## Testing policy
 
 - Run `python -m pytest tests` after code changes.
-- Add tests for submission contract once `sample_submission.csv` handling is implemented.
-- Add tests for metric implementation after official metric confirmation.
-- Add tests proving group splits have no overlap.
-- Add leakage tests ensuring target columns and target-derived columns are excluded from features.
-- Add smoke tests for data inventory, naive baseline, training and prediction as those scripts become real.
+- Keep submission-contract, metric, group-split, leakage, smoke, OOF and TCN tests current when those contracts change.
+- Add or update tests for any new feature family, post-processing step, model payload field, validation rule or Kaggle runtime behavior.
 
 ## Documentation update matrix
 
@@ -166,8 +163,8 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 
 - `kagglehub.dataset_upload()` is the correct Python tool for creating Kaggle datasets with directory structure. `kaggle datasets version -p` (CLI) skips subdirectories — never use it for repo datasets.
 - Kaggle Evaluation page wording: still needs cross-check when accessible.
-- Full feature contract: still needs deeper inventory and leakage review before first ML baseline.
-- Model training commands: scaffolded but not implemented yet.
+- Current active baseline is R3: 3-seed LightGBM `[42, 7, 123]` with R1 features + Savgol `w=31 p=2`, LB `12.177`.
+- Current active development is A5 TCN. Phase 2 dual normalization is implemented but still needs the full/screening training gate before promotion.
 
 ## Completion report format
 

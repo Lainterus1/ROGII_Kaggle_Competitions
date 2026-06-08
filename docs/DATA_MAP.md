@@ -69,12 +69,13 @@ Observed example test typewell columns from `data/test/000d7d20__typewell.csv`:
 
 `TVT`, `GR`
 
-Preliminary data contract notes:
+Current data contract notes:
 
 - Target/prediction column is `tvt` in submission and `TVT` in train horizontal files.
-- File prefix such as `000d7d20` is the well/group identifier candidate for validation and loading.
+- File prefix such as `000d7d20` is the current `well_id` and group identifier for loading and validation.
 - `TVT_input` appears in both train and test horizontal files.
-- Task deck states `TVT_input` contains known geology values until Prediction Start (PS); values after PS are missing and must not be used as labels/features.
+- Task deck states `TVT_input` contains known values until Prediction Start (PS); values after PS are missing and must not be used as labels/features.
+- Current models use `TVT_input` only to compute the last known pre-PS anchor/baseline (`last_tvt_input`) and residual reconstruction. In residual mode, `last_tvt_input` is not a model feature.
 - Sample submission IDs encode `<well_id>_<row_index>` and point to post-PS rows in the corresponding test horizontal file.
 
 Inventory checks implemented:
@@ -97,5 +98,4 @@ Still pending deeper inventory checks:
 
 ## Open questions
 
-- Is `TVT_input` a permitted input feature or a leakage-adjacent column?
-- Which column should be used for group-aware validation?
+- No open blocker for the current R3/A5 validation contract. `TVT_input` remains leakage-adjacent and must stay restricted to the documented pre-PS anchor/baseline use.

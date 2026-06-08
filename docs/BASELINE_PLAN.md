@@ -94,3 +94,20 @@ Kaggle run R1 (2026-06-05):
 - Official LB RMSE: **`12.247`**
 - LB/CV gap: `−2.0` **(LB BETTER than CV — test wells easier than train)**
 - 49% improvement over Stage 4 LB (24.114 → 12.247)
+
+Kaggle run R2 / PrP3 (2026-06-06):
+
+- Model: R1 LightGBM, 18 features, residual delta target
+- Post-processing: per-well Savgol smoothing `window=31`, `polyorder=2`
+- OOF RMSE: `14.2123` vs raw `14.2187` (`−0.0064`)
+- Official LB RMSE: **`12.239`**
+- Status: promoted as R2, later superseded by R3
+
+Kaggle run R3 / A4 multi-seed (2026-06-07):
+
+- Config: `configs/a4_multiseed.yaml`
+- Model: 3-seed LightGBM ensemble `[42, 7, 123]`, 18 R1 features, residual delta target
+- Post-processing: Savgol `window=31`, `polyorder=2`
+- CV RMSE: `14.052 ± 0.868`
+- Official LB RMSE: **`12.177`**
+- Status: canonical active baseline

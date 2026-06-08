@@ -46,7 +46,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Cancelled | Medium | Old CatBoost decision task; dependency is now approved and belongs to Stage A4 |
 | Done | High | Stage A0: sync CLI/config/README/model-payload contracts before new feature implementation |
 | Rejected | High | Stage A1: trajectory features (CV flat, LB worse: 12.487 vs R1 12.247, all features are geometry duplicates) |
-| Done | High | Stage A2a: add causal GR DWT features — CV 14.13 (+0.06 vs R1), promoted |
+| Not promoted | High | Stage A2a: add causal GR DWT features — CV 14.13 (+0.06 vs R1), but LB 12.558 worse than R1 12.247; code kept |
 | Done | High | Stage A2b: implement strict OOF spatial KNN — CV 14.21 (−0.02 flat), not promoted, code kept |
 | Done | Medium | Stage A2 combined (DWT + spatial): CV 14.19 (flat), spatial neutralizes DWT gain |
 | Rejected | High | Stage A3a: DTW typewell alignment — CV 14.63 (+0.50 vs A2a), insufficient GR correlation |
@@ -57,12 +57,13 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Superseded | Medium | 1D CNN sequence model — replaced by TCN in A5a |
 | Superseded | Medium | Multi-seed LGBM + CatBoost + Ridge stacking — multi-seed promoted as R3, CatBoost deferred to A6 |
 | Superseded | Medium | Stage A4: standardize OOF artifacts — replaced by A5.0 OOF infrastructure |
-| Planned | High | **Stage A5.0**: implement OOF infrastructure — `src/rogii/oof.py`, `TrainResult.oof_df`, `--save-oof` CLI flag |
+| Done | High | **Stage A5.0**: implement OOF infrastructure — `src/rogii/oof.py`, `TrainResult.oof_df`, `--save-oof` CLI flag; OOF contract includes `well_id,row_idx,fold,y_true,y_pred,baseline` |
 | Done | High | **Stage A5a v0**: TCN raw implementation — `sequence_features.py`, `sequence_data.py`, `tcn_model.py`, `train_tcn()`, `predict_tcn()`, `configs/a5_tcn.yaml`, `torch` in `requirements.txt`, `--model-type tcn` in CLI, AMP support |
 | Done | High | **Stage A5a v0**: TCN tests — `test_sequence_features.py`, `test_tcn_model.py`, `test_tcn_pipeline.py` |
 | Done | High | **A5a Phase 0 (Diagnostics)**: TCN OOF by fold/position/well_length, prediction variance, RMSE by `frac_after_ps`, TCN vs LGBM OOF. Created `src/rogii/diagnostics.py`, `scripts/diagnose_tcn.py`, `tests/test_diagnostics.py` (14 tests). OOF contract + `fold` column. Key findings: RMSE 7.2→20.0 monotonic, std_ratio 0.42 flattening, error corr 0.76. Priority re-ranked: P2→P3→P4→P1→P5→P6. |
 | Done | High | **A5a Fixed Control Config**: run `channels=[32,64,128] window=64 kernel=5 lr=3e-4` — CV 15.03 (4 folds, fold 5 aborted), OOF saved to `outputs/oof/a5_tcn_control_tcn_oof.parquet` |
 | Done | High | **A5a Phase 2 (#1 priority)**: dual input normalization — per-well normalized (65 cols) + global-standardized absolute X/Y/Z/MD (4 cols). Fold-local `StandardScaler` fit on train folds only, final scaler saved in `tcn_metadata["x_scaler"]`, `predict_tcn()` applies saved scaler via `input_scaler` param. `tcn_input_size` stored in payload. `WellSequence.X_abs` added. 6 tests (2 new, 4 modified). Target: std_ratio 0.42 → >0.7. |
+| Done | Medium | **A5a TCN tuning validation alignment**: `scripts/tune_tcn.py` now uses fold-selectable 5-fold `GroupKFold`, dense validation RMSE monitoring and prints the final `run_train.py` command. Best tuned small TCN CV recorded as `15.036 ± 0.848`; not promoted. |
 | Planned | High | **A5a Phase 3 (#2 priority)**: R1 sequence channels — PS geometry, local trajectory, GR stable features, anchor/baseline, position masks. All causal/test-available, leakage audit. Target: screening folds close to 14.2–14.5. |
 | Planned | High | **A5a Phase 4 (#3 priority)**: unified TCN eval path — extract common CV/eval logic, `tune_tcn.py` delegates to evaluator, `run_train.py` uses same evaluator, TCN OOF saved. Fixes fold 5 abort. |
 | Planned | Low | **A5a Phase 1 (deprioritized)**: full-well `WellSequence` with target only on post-PS, window ending at target row, left-padding for short context, same windowing in `predict_tcn()`. Correctness fix — early post-PS rows already best (RMSE 7.2). |
@@ -77,7 +78,7 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | Generalize Kaggle workflow docs for A2a and future candidate builds with separate model/dependency/kernel artifacts |
 | Done | High | Add `kaggle-candidate-build` skill for strict packaging of future Kaggle candidate builds |
 | Done | Medium | Record public LB for R1 fixed workflow submission `53410572`: `12.247` |
-| Done | High | Submit A2a to Kaggle: LB `12.558` (+0.311 vs R1 12.247), DWT doesn't generalize — R1 remains active baseline |
+| Done | High | Submit A2a to Kaggle: LB `12.558` (+0.311 vs R1 12.247), DWT doesn't generalize — not promoted |
 | Done | High | Analyse public notebooks, define Stage B1 (Beam Search Stratigraphic Alignment), implement `src/rogii/beam_search.py` with 9 tests |
 | Done | High | Stage B1: train beam search model (`configs/b1_lgbm.yaml`), evaluate CV — 5-fold 14.43 vs R1 14.19 (worse by +0.24). Beam features cannibalize X/Y/Z importance. |
 | Cancelled | High | Stage B1: Kaggle candidate build — CV degraded, not promoted. |
@@ -93,13 +94,14 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | Medium | **PrP3 Phase 5**: Grid search integrated via `--eval-postproc` in `run_train.py` (tests Savgol windows [5,11,17,25,31] × polyorders [2,3] × clip bounds [none, p0.1-p99.9, p0.5-p99.5, p1-p99]). |
 | Done | Medium | **PrP3 Phase 6**: Create `scripts/visualize_postproc.py` — per-well raw vs smoothed vs true TVT plots with continuity checks. |
 | Done | High | **PrP3 Phase 7**: Document ADR-018 (DECISIONS.md), Stage PrP3 (ROADMAP.md), tasks (TASKS.md), update KNOWN_ISSUES.md. |
-| In progress | High | **PrP3 Evaluation**: Run `--eval-postproc` CV to determine best Savgol window + clip config on OOF predictions |
+| Done | High | **PrP3 Evaluation**: Run `--eval-postproc` CV to determine best Savgol window + clip config on OOF predictions; completed by the following PrP3 Evaluate task |
 | Done | High | **PrP3 Evaluate**: Savgol w=31 p=2 best (OOF 14.2123 vs raw 14.2187, −0.0064). All Savgol configs beat raw. Clipping rejected (+0.002). 3/3 wells improved in per-well viz. Defaults updated to w=31 p=2. |
-| Done | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 → LB **12.239** (−0.008 vs R1 12.247). NEW BEST. Promoted as active baseline → **Designated as R2**. `ref 53428554`. |
+| Done | High | **PrP3 Kaggle**: Submit Savgol w=31 p=2 → LB **12.239** (−0.008 vs R1 12.247). Promoted as R2 at the time; later superseded by R3. `ref 53428554`. |
 | Done | High | **PoP2 Phase 1**: Create `src/rogii/z_physics.py` (`apply_z_physics`), `src/rogii/gr_matcher.py` (`apply_dtw_matching`), `src/rogii/postprocess.py` (`apply_postprocess_blend`). 16 tests pass. |
 | Done | High | **PoP2 Phase 2**: Integrate into `scripts/run_predict.py` (`--postprocess-blend`, `--blend-weights` flags). Blend runs between `run_predict()` and Savgol/clip. |
 | Rejected | High | **PoP2 Evaluate**: OOF CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak standalone predictors — blend degrades model. Code behind `--postprocess-blend` flag. Same pattern as all physics/alignment experiments. |
 
 ## Open questions
 
-- None for the current roadmap reset. Stage-specific blockers are tracked in `docs/ROADMAP.md` and `docs/KNOWN_ISSUES.md`.
+- A5 Phase 2 gate result will determine whether A5b/A5c remain planned or are re-prioritized.
+- Stage-specific blockers are tracked in `docs/ROADMAP.md` and `docs/KNOWN_ISSUES.md`.

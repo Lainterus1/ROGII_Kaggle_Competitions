@@ -32,7 +32,7 @@ Recommended reading order for future agents:
 4. `docs/DECISIONS.md` for accepted decisions.
 5. `docs/TASKS.md` for current backlog.
 6. `docs/ROADMAP.md` for post-baseline development direction.
-7. `AGENTS.md` after it is created in Step 05.
+7. `AGENTS.md` for agent operating rules, forbidden actions and completion-report format.
 
 Repository and runtime locations:
 
@@ -87,16 +87,16 @@ Handoff and context compaction:
 |---|---|
 | `.agents/skills/handoff/SKILL.md` | Handoff format, produce and resume procedures |
 
-Planned architecture locations:
+Implemented architecture locations:
 
 | Path | Purpose |
 |---|---|
-| `src/rogii/` | Reusable package for data, features, validation, models, submissions and MLflow |
-| `scripts/` | Thin executable entry points |
+| `src/rogii/` | Reusable package for data, features, validation, models, post-processing, OOF, diagnostics, submissions and Kaggle runtime helpers |
+| `scripts/` | Thin executable entry points for inventory, validation, training, prediction, diagnostics, tuning and Kaggle inference |
 | `configs/` | Local/Kaggle paths and run settings |
 | `tests/` | Contract, validation, metric and smoke tests |
-| `notebooks/` | Thin Kaggle runner and lightweight EDA only |
-| `.agents/skills/` | Future reusable project-specific agent skills |
+| `notebooks/` | Thin Kaggle runner metadata and candidate inference kernels only |
+| `.agents/skills/` | Reusable project-specific agent skills |
 | `.opencode/opencode.json` | Project OpenCode configuration |
 | `.opencode/plugin/rogii-guards.ts` | Project guard hooks for artifacts, Kaggle submission, leakage-sensitive edits and verification reminders |
 
@@ -114,8 +114,23 @@ Kaggle runner locations:
 | `src/rogii/kaggle_runtime.py` | Marker-based offline Kaggle repo/model/data discovery |
 | `scripts/kaggle_offline_inference.py` | Offline Kaggle inference CLI wrapper |
 | `notebooks/kernel-metadata.json` | Kaggle CLI metadata for `00-rogii-inference-r1` |
+| `notebooks/kernels/a2a-dwt/` | Historical A2a DWT candidate kernel metadata and notebook |
+| `notebooks/kernels/a4-multiseed/` | Current R3/A4 multi-seed candidate kernel metadata and notebook |
 | `.agents/skills/kaggle-runner/SKILL.md` | Current Kaggle runner workflow and validation checklist |
 | `.agents/skills/kaggle-candidate-build/SKILL.md` | Standard packaging contract for any new Kaggle candidate build |
+
+A5/TCN and OOF locations:
+
+| Path | Purpose |
+|---|---|
+| `src/rogii/sequence_features.py` | Causal sequence feature construction for TCN |
+| `src/rogii/sequence_data.py` | Per-well sequence dataset/windowing utilities |
+| `src/rogii/tcn_model.py` | TCN model implementation |
+| `src/rogii/oof.py` | OOF persistence contract |
+| `src/rogii/diagnostics.py` | OOF diagnostics and error analysis |
+| `scripts/tune_tcn.py` | Fold-selectable TCN tuning/validation helper |
+| `scripts/diagnose_tcn.py` | TCN vs LGBM OOF diagnostics |
+| `configs/a5_tcn.yaml` | Current A5 TCN control/Phase 2 config |
 
 ## Open questions
 

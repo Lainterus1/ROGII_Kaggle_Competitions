@@ -56,7 +56,7 @@ Tabular ceiling at CV ~14.1 / LB ~12.2 is the LightGBM-only ceiling, not the pro
 
 1. Run `python -m pytest tests`.
 2. Run full 5-fold GroupKFold CV for the candidate stage.
-3. Compare against R2 and the latest promoted stage.
+3. Compare against R3 and the latest promoted stage.
 4. Run leakage review for every new feature family or target transform.
 5. Generate a candidate submission only in an ignored runtime path such as `outputs/submission.csv` or `/kaggle/working/submission.csv`.
 6. Run `python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv` locally or the Kaggle-equivalent command in the notebook.
@@ -75,10 +75,10 @@ Status: Done. Train can load `configs/baseline_lgbm.yaml`; saved model payloads 
 Scope:
 
 - Replace old pending roadmap items with stages A1-A4.
-- Keep R2 as the active baseline and Stage 4 as the historical frozen baseline.
+- Keep R3 as the active baseline and Stage 4 as the historical frozen baseline.
 - Ensure model payloads carry enough metadata to reproduce prediction: feature flags, target mode, feature columns and run name.
 - Sync README and config examples with the currently supported CLI commands.
-- Keep Kaggle workflow: training notebook (`01_kaggle_train.ipynb`) saves R1 model to `rogii-models-v2`; inference notebook (`00_kaggle_inference.ipynb`) loads `rogii-repo-v2` + `rogii-models-v2` and generates a validated submission (ADR-007, ADR-013).
+- Keep Kaggle workflow safe: stable R1 fallback remains available, while current and future candidates use candidate-specific repo/model/dependency datasets and kernel metadata (ADR-013, ADR-022).
 
 Primary files:
 
@@ -119,13 +119,13 @@ Code remaining in repo (`TRAJECTORY_FEATURES`, `build_trajectory_features()`, `i
 
 ## Stage A2: GR DWT and Strict OOF Spatial KNN
 
-Status: **Partially promoted.** A2a (DWT) promoted (+0.06 CV). A2b (spatial KNN) not promoted (flat CV, −0.02 vs R1). No leakage detected in either block.
+Status: **Implemented, not promoted.** A2a (DWT) improved local CV by `0.06` but worsened public LB to `12.558` vs R1 `12.247`; DWT does not generalize. A2b (spatial KNN) was flat on CV and not promoted. No leakage detected in either block.
 
 Goal: extract deeper GR structure and add safe inter-well spatial context without target leakage.
 
-### Stage A2a: Causal GR DWT — **Promoted**
+### Stage A2a: Causal GR DWT — **Not promoted after LB**
 
-CV: 14.13 (R1: 14.19, +0.06). Runtime: ~1.4 min full train.
+CV: 14.13 (R1: 14.19, +0.06). Public LB: 12.558 (worse than R1 12.247). Runtime: ~1.4 min full train.
 
 Feature scope:
 
@@ -196,7 +196,7 @@ Multi-model ensemble requires OOF infrastructure and diverse model types first.
 
 ## Stage A5: Architecture Diversity — Sequence Models + OOF Infrastructure + Multi-Strategy Ensemble
 
-Status: **Planned.** Implementation starting.
+Status: **Active.** TCN v0, OOF persistence, diagnostics and Phase 2 dual normalization are implemented. Phase 2 still needs the full/screening training gate before promotion.
 
 Goal: close the gap between R3 (LB 12.177) and leader solutions (LB 5.99–7.5) through architecture diversity. Analysis of top 20 leader solutions and public notebooks (plagiagia v2.8, stpeteishii TCN, Scott Weeden v13 seq-CNN, adarsh5harma Stacker v2) confirms three critical gaps.
 
@@ -225,14 +225,16 @@ A5a and A5b are independent. A5c depends on both + R3. A5d is final polish.
 
 ### Stage A5.0: OOF Infrastructure (gate for A5a-A5c)
 
+Status: **Done.** OOF persistence and `--save-oof` are implemented for the current LightGBM/TCN training paths; future ensemble work may extend the contract.
+
 Goal: standardize saving/loading of out-of-fold predictions across all model types so A5c can blend them without retraining.
 
 Scope:
 - `src/rogii/oof.py` — `save_oof(df, path, strategy_name)` / `load_oof(path)`.
-  - OOF contract: `pd.DataFrame` columns `["well_id", "row_idx", "y_true", "y_pred", "baseline"]`.
+  - OOF contract: `pd.DataFrame` columns `["well_id", "row_idx", "fold", "y_true", "y_pred", "baseline"]`.
   - Values in delta-space (residual from baseline), baseline=0 when `residual_target=False`.
   - Format: Parquet in `outputs/oof/<run_name>_<strategy>_oof.parquet`.
-- `src/rogii/train.py` — `TrainResult` gains `oof_df: pd.DataFrame | None`. CV loop always collects `oof_rows` (currently only when `eval_postproc=True`). After CV, converts to `_build_oof_per_well()` → `oof_df`.
+- `src/rogii/train.py` — `TrainResult` has `oof_df: pd.DataFrame | None`. CV loop collects `oof_rows`; after CV, converts to `_build_oof_per_well()` → `oof_df`.
 - `scripts/run_train.py` — new `--save-oof` flag. Saves `train_result.oof_df` to `outputs/oof/`.
 
 Primary files: `src/rogii/oof.py`, `src/rogii/train.py`, `scripts/run_train.py`, `tests/test_oof.py`.
@@ -358,6 +360,8 @@ Files: `src/rogii/sequence_features.py`, `src/rogii/features.py` as reference, `
 | 2 | `tune_tcn.py` only sets candidates, calls evaluator | Tuning matches final train |
 | 3 | `run_train.py` uses same evaluator for CV | Kaggle-transfer honest |
 | 4 | OOF saved for TCN | Enables postprocess/blend analysis |
+
+Current status: `scripts/tune_tcn.py` has been aligned to fold-selectable 5-fold `GroupKFold` with dense validation RMSE monitoring, but a single shared evaluator for `tune_tcn.py` and `run_train.py` is still pending.
 
 Files: `src/rogii/train.py`, possibly new `src/rogii/tcn_training.py`, `scripts/tune_tcn.py`, `scripts/run_train.py`.
 
@@ -560,7 +564,7 @@ All top public solutions (Roman Tamrazov sub-9, Ravaghi hill-climbing, Pilkwang 
 
 Goal: Improve CV/LB through per-well post-processing of predicted TVT sequences without changing model architecture or features.
 
-Status: **Promoted → Designated as R2 (canonical active baseline).** Savgol w=31 p=2. LB 12.239 (−0.008 vs R1 12.247).
+Status: **Promoted as R2, superseded by R3.** Savgol w=31 p=2. LB 12.239 (−0.008 vs R1 12.247). R3 later added multi-seed LightGBM averaging and reached LB 12.177.
 
 Results (OOF 5-fold CV, 3.78M rows, 773 wells):
 
@@ -702,9 +706,9 @@ The model has already extracted all useful signal from spatial coordinates and G
 | **Slope baseline (B2b)** | **Rejected** | Best CV 14.16 (slope_recent) flat vs R1. slope_md CV 284, wls CV 130. TVT-vs-MD trend does not extrapolate after PS — wells change direction. |
 | **Formation Plane KNN (B3)** | **Rejected** | CV 14.99 (+0.80 vs R1). fp_knn_mean_dist #5 feature but cannibalizes X/Y/Z (35% importance from spatial coordinates). Well-level formation imputation via KNN adds no net signal. |
 | **Z-Drift Physics (PrP2)** | **Not promoted** | CV 14.20 (flat vs R1 14.19, +0.01). 3 TVT-Z coupling features. Only offset_at_anchor is new signal; implied_tvt = Z+const, implied_tvt_resid = dz_since_ps (r=1.0). Fold inconsistency: fold 2 -0.80, fold 3 +0.62. Code kept behind include_z_drift flag. |
-| **1D CNN / TCN sequence model** | **Planned as A5a** | Leader analysis: TCN/CNN with causal convolutions on raw coordinates is the single biggest gap vs top solutions (LB 5.99–7.5). |
-| **Beam Search + Particle Filter as predictors** | **Planned as A5b** | Leader analysis: beam/PF work as independent predictors blended with ML, NOT as tabular features. B1 proved features degrade; blend approach is architecturally different. |
-| **Multi-model ensemble (LGBM+TCN+Beam+PF)** | **Planned as A5c** | Requires OOF infrastructure (A5.0) + diverse strategies (A5a, A5b). Leader pattern: 3+ independent strategies blended. |
+| **1D CNN / TCN sequence model** | **Active as A5a** | TCN v0, OOF, diagnostics and Phase 2 dual normalization are implemented; Phase 2 training gate pending. |
+| **Beam Search + Particle Filter as predictors** | **Planned as A5b** | Leader analysis: beam/PF work as independent predictors blended with ML, NOT as tabular features. B1 proved tabular features degrade; blend approach is architecturally different. |
+| **Multi-model ensemble (LGBM+TCN+Beam+PF)** | **Planned as A5c** | Requires reliable OOF artifacts and diverse strategies (A5a, A5b). Leader pattern: 3+ independent strategies blended. |
 | **Multi-seed LGBM + CatBoost + stacking** | **Superseded by A5** | Multi-seed promoted as R3. CatBoost deferred to A6 — lower priority than TCN for architecture diversity. |
 | **Optuna HPO** | **Planned as A5d** | Lightweight dependency. Execute after A5c if ensemble CV < 10 to squeeze final 0.1–0.5. |
 | **PoP2: 3-Strategy Blend** | **Rejected** | CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak predictors — blending degrades model. Code kept behind `--postprocess-blend` flag. |

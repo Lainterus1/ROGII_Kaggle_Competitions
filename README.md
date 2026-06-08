@@ -25,7 +25,9 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 
 ## Текущий статус
 
-Текущий лучший clean baseline: **A2a (DWT)**.
+Текущий лучший baseline: **R3** — 3-seed LightGBM ensemble `[42, 7, 123]` на R1 18-feature set + Savgol `window=31, polyorder=2`.
+
+Public LB: **12.177** (`53440641`). Local CV: `14.052 ± 0.868` (`GroupKFold`, 5 folds).
 
 Готово:
 
@@ -34,15 +36,18 @@ git clone https://github.com/Lainterus1/ROGII_Kaggle_Competitions.git
 - Naive last-known-`TVT_input` baseline.
 - Stage 4 LightGBM + `last_tvt_input` reference baseline: public LB RMSE `24.114`.
 - R1 optimized LightGBM baseline: 18 features, residual target, CV RMSE `~14.19`, LB RMSE `12.247`.
-- **A2a DWT baseline: 20 features (+2 causal GR DWT), residual target, CV RMSE `14.13`, LB pending.**
-- `docs/HOW_IT_WORKS.md` — feature-by-feature explanation including DWT.
-- Staged roadmap A0-A4. A1-A4 feature experiments completed, tabular ceiling confirmed at CV ~14.13.
-- 113 tests, all green.
+- R2 post-processing baseline: R1 + Savgol `w=31 p=2`, OOF `14.2123`, LB `12.239`.
+- R3 multi-seed baseline: 3 LightGBM seeds + Savgol, CV `14.052`, LB `12.177`; current active baseline.
+- A1-B3 / PrP2 / PoP2 feature and physics experiments: implemented, evaluated, and mostly rejected or not promoted; tabular ceiling confirmed around CV `14.1` / LB `12.2`.
+- A5 TCN path: raw TCN v0, OOF persistence, diagnostics, and Phase 2 dual normalization implemented; Phase 2 full training gate is pending.
+- `docs/HOW_IT_WORKS.md` — feature-by-feature explanation of the active R3 feature set and rejected feature blocks.
+- Test suite covers submission, leakage, feature engineering, post-processing, OOF, diagnostics and TCN contracts.
 
 Следующее:
 
-- Submit A2a to Kaggle — verify LB gap.
-- Deferred: 1D CNN sequence model, multi-model ensemble (Stage A4+).
+- Run A5 TCN Phase 2 full/screening training gate: target `std_ratio > 0.7` and screening folds better than the Phase 0 control.
+- If Phase 2 passes, implement A5 Phase 3 R1 sequence channels and Phase 4 unified TCN evaluation path.
+- Keep R3 LightGBM + Savgol as the Kaggle fallback until a new candidate beats it on CV/OOF and passes submission validation.
 
 ## Планируемая установка
 
@@ -62,32 +67,39 @@ python scripts/make_data_inventory.py --data-dir data
 python scripts/run_naive_baseline.py --data-dir data --output outputs/submission.csv
 python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
 
-# R1 baseline (18 features)
+# R1 baseline (18 features, single seed)
 python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --residual-target --output-model models/r1_lgbm.pkl
 
-# A2a baseline (20 features, DWT promoted)
-python scripts/run_train.py --data-dir data --n-splits 5 --seed 42 --include-geometry --include-gr --include-gr-dwt --residual-target --output-model models/a2a_lgbm.pkl
+# R3 active baseline (3 seeds + R1 features)
+python scripts/run_train.py --config configs/a4_multiseed.yaml --data-dir data --output-model models/a4_multiseed.pkl
 
 # Predict (model payload carries feature flags and column order)
-python scripts/run_predict.py --data-dir data --model models/a2a_lgbm.pkl --output outputs/submission.csv
+python scripts/run_predict.py --data-dir data --model models/a4_multiseed.pkl --savgol-smooth --output outputs/submission.csv
 python scripts/validate_submission.py --data-dir data --submission outputs/submission.csv
 
+# A5 TCN control / Phase 2 candidate
+python scripts/run_train.py --config configs/a5_tcn.yaml --data-dir data --save-oof --output-model models/a5_tcn.pkl
+
 # Optional feature flags (experiments, not in active baseline):
-# --include-spatial   (OOF spatial KNN)
-# --include-dtw       (DTW typewell alignment)
-# --include-geology   (formation geology)
+# --include-gr-dwt           (A2a DWT; LB rejected)
+# --include-spatial          (OOF spatial KNN; flat CV)
+# --include-dtw              (DTW typewell alignment; rejected)
+# --include-geology          (formation geology; rejected/not promoted)
+# --include-beam             (beam features; rejected as tabular features)
+# --include-formation-plane  (formation-plane KNN; rejected)
+# --include-z-drift          (TVT-Z drift features; not promoted)
 ```
 
 Модели, сохраненные новым train payload, сами хранят feature flags и список колонок. Для таких моделей `run_predict.py` не должен получать повторные `--include-*` флаги, если только это не legacy-модель без payload metadata.
 
 Kaggle workflow:
 
-- Stable R1 submit path uses `daniilgonchar/00-rogii-inference-r1` with internet OFF, `rogii-repo-v2`, `rogii-models-v2` and `notebooks/kernel-metadata.json`.
-- Push the inference kernel with `kaggle kernels push -p notebooks`.
-- Validate the generated `/kaggle/working/submission.csv` from kernel output before submission.
-- For code-competition submit, use the kernel version output: `kaggle competitions submit -c rogii-wellbore-geology-prediction -k daniilgonchar/00-rogii-inference-r1 -v <version> -f submission.csv -m "..."`.
-- A2a DWT inference still needs offline `pywavelets` packaging before it can replace R1 in internet-OFF Submit reruns.
-- For A2a or any future candidate, keep R1 fallback untouched: update `rogii-repo-v2` if code changed, upload a candidate model dataset, attach an offline dependency dataset when needed, push a candidate kernel, validate output, then submit that kernel version.
+- Stable R1 fallback path uses `daniilgonchar/00-rogii-inference-r1` with internet OFF, `rogii-repo-v2`, `rogii-models-v2` and `notebooks/kernel-metadata.json`.
+- Current R3 candidate path uses `notebooks/kernels/a4-multiseed/`, `daniilgonchar/00-rogii-inference-a4-v3`, `daniilgonchar/rogii-repo-a4` and `daniilgonchar/rogii-models-a4-multiseed`.
+- Candidate builds must use candidate-specific repo/model/dependency datasets. If source code changed, create a new repo dataset via `kagglehub.dataset_upload()`; do not update shared fallback datasets.
+- Push the intended kernel folder with `kaggle kernels push -p <kernel-folder>`.
+- Validate `/kaggle/working/submission.csv` from kernel output before submission.
+- Kaggle submission requires explicit user approval. After approval, submit the validated kernel version: `kaggle competitions submit -c rogii-wellbore-geology-prediction -k <kernel> -v <version> -f submission.csv -m "..."`.
 
 ## Документация
 
