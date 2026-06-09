@@ -1,4 +1,4 @@
-"""Run LightGBM training with GroupKFold CV and generate a trained model."""
+"""Run LightGBM/TCN training with GroupKFold CV and generate a trained model."""
 
 from argparse import ArgumentParser
 from pathlib import Path
@@ -9,10 +9,145 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rogii.config import load_yaml_config
-from rogii.mlflow_utils import default_experiment_name, end_run, log_artifact, log_metrics, log_params, setup_tracking, start_run
+from rogii.mlflow_utils import (
+    default_experiment_name, end_run, log_artifact,
+    log_metrics, log_params, setup_tracking, start_run,
+)
 from rogii.model_io import build_model_payload, make_feature_flags
 from rogii.train import run_train
 
+# ---------------------------------------------------------------------------
+# Feature keys shared by CLI args, config sections, and downstream kwargs
+# ---------------------------------------------------------------------------
+_FEATURE_KEYS = [
+    "include_tvt_input", "include_geometry", "include_gr", "include_gr_dwt",
+    "include_trajectory", "include_typewell", "include_spatial", "include_dtw",
+    "include_geology", "include_beam", "include_formation_plane", "include_z_drift",
+]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _section(config: dict[str, Any], name: str) -> dict[str, Any]:
+    value = config.get(name, {})
+    if not isinstance(value, dict):
+        raise ValueError(f"Config section must be a mapping: {name}")
+    return value
+
+
+def _val(cli, section: dict[str, Any], key: str, default, coerce=None):
+    """Return CLI value if provided (not None), else config[key] or default."""
+    if cli is not None:
+        return coerce(cli) if coerce else cli
+    v = section.get(key, default)
+    return coerce(v) if coerce and v is not None else v
+
+
+def _resolve_seed_list(args, run_cfg: dict[str, Any]) -> list[int]:
+    if args.seed_list:
+        return [int(s.strip()) for s in args.seed_list.split(",")]
+    if args.n_seeds:
+        base = _val(args.seed, run_cfg, "seed", 42, int)
+        return [base + i * 1000 for i in range(args.n_seeds)]
+    config_list = run_cfg.get("seed_list")
+    if config_list and isinstance(config_list, list):
+        return [int(s) for s in config_list]
+    return [_val(args.seed, run_cfg, "seed", 42, int)]
+
+
+def _resolve_feature_flags(args, feat_cfg: dict[str, Any]) -> dict:
+    """Return {feature_key: bool, ..., 'residual_target': bool, 'baseline_method': str}."""
+    ff = {k: bool(getattr(args, k, False) or feat_cfg.get(k, False)) for k in _FEATURE_KEYS}
+    ff["residual_target"] = bool(args.residual_target or feat_cfg.get("residual_target", False))
+    ff["baseline_method"] = args.baseline_method or feat_cfg.get("baseline_method", "flat")
+    return ff
+
+
+def _resolve_tcn_config(args, model_cfg: dict[str, Any]) -> dict[str, Any]:
+    raw = model_cfg.get("params", {})
+    tc = dict(raw) if isinstance(raw, dict) else {}
+
+    def _i(cli, key, default):
+        return _val(cli, tc, key, default, int)
+
+    def _f(cli, key, default):
+        return _val(cli, tc, key, default, float)
+
+    return {
+        "num_channels": (
+            tuple(int(x.strip()) for x in args.tcn_channels.split(","))
+            if args.tcn_channels else tuple(tc.get("num_channels", [64, 128, 256, 128]))
+        ),
+        "window_size": _i(args.tcn_window, "window_size", 64),
+        "epochs": _i(args.tcn_epochs, "epochs", 20),
+        "batch_size": _i(args.tcn_batch_size, "batch_size", 256),
+        "lr": _f(args.tcn_lr, "learning_rate", 1e-3),
+        "weight_decay": _f(args.tcn_weight_decay, "weight_decay", 1e-4),
+        "kernel_size": _i(args.tcn_kernel_size, "kernel_size", 5),
+        "dropout": _f(args.tcn_dropout, "dropout", 0.1),
+        "patience": _i(args.tcn_patience, "patience", 5),
+        "device": args.tcn_device or str(tc.get("device", "cuda")),
+        "stride": _i(args.tcn_stride, "stride", 2),
+        "num_workers": _i(args.tcn_workers, "num_workers", 0),
+    }
+
+
+def _report_results(result, output_model: str, mlflow_run, run_name: str,
+                    model_type: str, save_oof: bool) -> None:
+    print(f"CV strategy: {result.cv_strategy}")
+    print(f"Seeds ({len(result.seed_list)}): {result.seed_list}")
+    print(f"Target mode: {'residual (delta)' if result.residual_target else 'direct (TVT)'}")
+    print(f"Feature columns ({len(result.feature_columns)}): {result.feature_columns}")
+    print(f"CV RMSE (mean ± std): {result.cv_rmse_mean:.6f} ± {result.cv_rmse_std:.6f}")
+    print(f"CV fold scores: {[round(s, 6) for s in result.cv_rmse_folds]}")
+    print(f"Train rows (post-PS): {result.train_rows}")
+    print(f"Train wells: {result.train_wells}")
+    print(f"Model saved: {output_model}")
+
+    metrics = {
+        "cv_rmse_mean": result.cv_rmse_mean,
+        "cv_rmse_std": result.cv_rmse_std,
+        "train_rows": result.train_rows,
+        "train_wells": result.train_wells,
+        "n_features": len(result.feature_columns),
+    }
+    for i, score in enumerate(result.cv_rmse_folds):
+        metrics[f"cv_rmse_fold_{i + 1}"] = score
+    log_metrics(metrics, run=mlflow_run)
+    log_artifact(output_model, run=mlflow_run)
+    end_run(mlflow_run)
+
+    if save_oof and result.oof_df is not None:
+        from rogii.oof import save_oof
+        oof_path = save_oof(result.oof_df, "outputs", f"{run_name}_{model_type}")
+        print(f"OOF saved: {oof_path}")
+
+
+def _common_payload(result, n_splits: int, run_cfg: dict[str, Any],
+                    config_path: str | None) -> dict[str, Any]:
+    return dict(
+        models=result.models,
+        feature_columns=result.feature_columns,
+        residual_target=result.residual_target,
+        baseline_method=result.baseline_method or "flat",
+        run_name=run_cfg.get("name"),
+        seed_list=result.seed_list,
+        n_splits=n_splits,
+        cv_strategy=result.cv_strategy,
+        cv_rmse_mean=result.cv_rmse_mean,
+        cv_rmse_std=result.cv_rmse_std,
+        cv_rmse_folds=result.cv_rmse_folds,
+        train_rows=result.train_rows,
+        train_wells=result.train_wells,
+        config_path=config_path,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def parse_args() -> ArgumentParser:
     parser = ArgumentParser(description=__doc__)
@@ -70,176 +205,84 @@ def parse_args() -> ArgumentParser:
     return parser
 
 
-def _section(config: dict[str, Any], name: str) -> dict[str, Any]:
-    value = config.get(name, {})
-    if not isinstance(value, dict):
-        raise ValueError(f"Config section must be a mapping: {name}")
-    return value
-
-
-def _bool_setting(cli_value: bool, section: dict[str, Any], key: str, default: bool = False) -> bool:
-    return bool(cli_value or section.get(key, default))
-
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     args = parse_args().parse_args()
     config = load_yaml_config(args.config) if args.config else {}
-    run_config = _section(config, "run")
-    model_config = _section(config, "model")
-    feature_config = _section(config, "features")
-    validation_config = _section(config, "validation")
-    artifact_config = _section(config, "artifacts")
+    run_cfg = _section(config, "run")
+    model_cfg = _section(config, "model")
+    feat_cfg = _section(config, "features")
+    val_cfg = _section(config, "validation")
+    art_cfg = _section(config, "artifacts")
 
-    n_splits = args.n_splits or int(validation_config.get("n_splits", 5))
-
-    # Resolve seed list
-    if args.seed_list:
-        seed_list = [int(s.strip()) for s in args.seed_list.split(",")]
-    elif args.n_seeds:
-        base = args.seed or int(run_config.get("seed", 42))
-        seed_list = [base + i * 1000 for i in range(args.n_seeds)]
-    else:
-        config_seed_list = run_config.get("seed_list")
-        if config_seed_list and isinstance(config_seed_list, list):
-            seed_list = [int(s) for s in config_seed_list]
-        else:
-            seed = args.seed or int(run_config.get("seed", 42))
-            seed_list = [seed]
-
-    cv_strategy = args.cv_strategy or validation_config.get("strategy", "group")
-    strat_tvt_bins = args.strat_tvt_bins or int(validation_config.get("strat_tvt_bins", 4))
-    strat_spatial_clusters = args.strat_spatial_clusters or int(validation_config.get("strat_spatial_clusters", 5))
-
-    output_model = args.output_model or artifact_config.get("model_path", "models/baseline_lgbm.pkl")
-    model_params = model_config.get("params", {})
+    # --- Resolve config values ---
+    n_splits = _val(args.n_splits, val_cfg, "n_splits", 5, int)
+    seed_list = _resolve_seed_list(args, run_cfg)
+    seed = _val(args.seed, run_cfg, "seed", 42, int)
+    cv_strategy = args.cv_strategy or val_cfg.get("strategy", "group")
+    strat_tvt_bins = _val(args.strat_tvt_bins, val_cfg, "strat_tvt_bins", 4, int)
+    strat_spatial_clusters = _val(args.strat_spatial_clusters, val_cfg, "strat_spatial_clusters", 5, int)
+    model_type = args.model_type or str(model_cfg.get("type", "lightgbm"))
+    output_model = args.output_model or art_cfg.get("model_path", "models/baseline_lgbm.pkl")
+    model_params = model_cfg.get("params", {})
     if not isinstance(model_params, dict):
         raise ValueError("Config section model.params must be a mapping")
     model_params = dict(model_params)
 
-    include_tvt_input = _bool_setting(args.include_tvt_input, feature_config, "include_tvt_input")
-    include_geometry = _bool_setting(args.include_geometry, feature_config, "include_geometry")
-    include_gr = _bool_setting(args.include_gr, feature_config, "include_gr")
-    include_gr_dwt = _bool_setting(args.include_gr_dwt, feature_config, "include_gr_dwt")
-    include_typewell = _bool_setting(args.include_typewell, feature_config, "include_typewell")
-    include_trajectory = _bool_setting(args.include_trajectory, feature_config, "include_trajectory")
-    include_spatial = _bool_setting(args.include_spatial, feature_config, "include_spatial")
-    include_dtw = _bool_setting(args.include_dtw, feature_config, "include_dtw")
-    include_geology = _bool_setting(args.include_geology, feature_config, "include_geology")
-    include_beam = _bool_setting(args.include_beam, feature_config, "include_beam")
-    include_formation_plane = _bool_setting(args.include_formation_plane, feature_config, "include_formation_plane")
-    include_z_drift = _bool_setting(args.include_z_drift, feature_config, "include_z_drift")
-    residual_target = _bool_setting(args.residual_target, feature_config, "residual_target")
-    baseline_method = args.baseline_method or feature_config.get("baseline_method", "flat")
-    model_type = args.model_type or str(model_config.get("type", "lightgbm"))
-    seed = args.seed or int(run_config.get("seed", 42))
+    # Feature flags (dict with all 12 feature keys + residual_target + baseline_method)
+    ff = _resolve_feature_flags(args, feat_cfg)
+    residual_target = ff.pop("residual_target")
+    baseline_method = ff.pop("baseline_method")
 
-    # --- MLflow tracking ---
-    run_name = run_config.get("name", "rogii-run")
-    exp_name = run_config.get("experiment_name", default_experiment_name())
+    # --- MLflow setup ---
+    run_name = run_cfg.get("name", "rogii-run")
+    exp_name = run_cfg.get("experiment_name", default_experiment_name())
     setup_tracking()
     mlflow_run = start_run(run_name=run_name, experiment_name=exp_name)
-    mlflow_params = {
-        "model_type": model_type,
-        "n_splits": n_splits,
-        "n_seeds": len(seed_list),
-        "seed_list": str(seed_list),
-        "cv_strategy": cv_strategy,
-        "residual_target": residual_target,
-        "baseline_method": baseline_method,
-        "include_geometry": include_geometry,
-        "include_gr": include_gr,
-        "include_gr_dwt": include_gr_dwt,
-        "include_tvt_input": include_tvt_input,
-        "include_trajectory": include_trajectory,
-        "include_typewell": include_typewell,
-        "include_spatial": include_spatial,
-        "include_dtw": include_dtw,
-        "include_geology": include_geology,
-        "include_beam": include_beam,
-        "include_formation_plane": include_formation_plane,
-        "include_z_drift": include_z_drift,
+    log_params({
+        "model_type": model_type, "n_splits": n_splits, "n_seeds": len(seed_list),
+        "seed_list": str(seed_list), "cv_strategy": cv_strategy,
+        "residual_target": residual_target, "baseline_method": baseline_method,
         "config_file": args.config or "none",
-    }
-    mlflow_params.update({f"model_param_{k}": v for k, v in model_params.items()})
-    log_params(mlflow_params, run=mlflow_run)
+        **ff,
+        **{f"model_param_{k}": v for k, v in model_params.items()},
+    }, run=mlflow_run)
 
     model_dir = Path(output_model).parent
     model_dir.mkdir(parents=True, exist_ok=True)
 
+    # --- Train ---
     if model_type == "tcn":
         from rogii.train import train_tcn
 
-        tcn_params = model_config.get("params", {})
-        if not isinstance(tcn_params, dict):
-            tcn_params = {}
-        tcn_params = dict(tcn_params)
-
-        tcn_channels_str = args.tcn_channels
-        if tcn_channels_str:
-            tcn_channels = tuple(int(x.strip()) for x in tcn_channels_str.split(","))
-        else:
-            tcn_channels = tuple(tcn_params.get("num_channels", [64, 128, 256, 128]))
-
-        window_size = args.tcn_window or int(tcn_params.get("window_size", 64))
-        epochs = args.tcn_epochs or int(tcn_params.get("epochs", 20))
-        batch_size = args.tcn_batch_size or int(tcn_params.get("batch_size", 256))
-        tcn_lr = args.tcn_lr or float(tcn_params.get("learning_rate", 1e-3))
-        tcn_wd = args.tcn_weight_decay or float(tcn_params.get("weight_decay", 1e-4))
-        tcn_kernel_size = args.tcn_kernel_size or int(tcn_params.get("kernel_size", 5))
-        tcn_dropout = args.tcn_dropout if args.tcn_dropout is not None else float(tcn_params.get("dropout", 0.1))
-        tcn_patience = args.tcn_patience or int(tcn_params.get("patience", 5))
-        tcn_device = args.tcn_device or str(tcn_params.get("device", "cuda"))
-        tcn_stride = args.tcn_stride if args.tcn_stride is not None else int(tcn_params.get("stride", 2))
-        tcn_workers = args.tcn_workers if args.tcn_workers is not None else int(tcn_params.get("num_workers", 0))
+        tcn = _resolve_tcn_config(args, model_cfg)
 
         result = train_tcn(
             data_dir=args.data_dir,
-            window_size=window_size,
-            num_channels=tcn_channels,
-            kernel_size=tcn_kernel_size,
-            dropout=tcn_dropout,
-            batch_size=batch_size,
-            epochs=epochs,
-            patience=tcn_patience,
-            lr=tcn_lr,
-            weight_decay=tcn_wd,
             n_splits=n_splits,
             seed=seed,
-            device=tcn_device,
             residual_target=residual_target,
             baseline_method=baseline_method,
-            stride=tcn_stride,
-            num_workers=tcn_workers,
+            **tcn,
         )
 
         import torch
-        model_cpu = result.models[0].cpu()
-        tcn_state = {k: v for k, v in model_cpu.state_dict().items()}
+        tcn_state = {k: v for k, v in result.models[0].cpu().state_dict().items()}
         tcn_meta = result.tcn_metadata or {}
         payload = build_model_payload(
-            models=result.models,
-            feature_columns=result.feature_columns,
-            residual_target=result.residual_target,
-            baseline_method=result.baseline_method,
+            **_common_payload(result, n_splits, run_cfg, args.config),
             feature_flags=None,
             model_type="tcn",
-            run_name=run_config.get("name"),
-            seed_list=result.seed_list,
-            n_splits=n_splits,
-            cv_strategy=result.cv_strategy,
-            cv_rmse_mean=result.cv_rmse_mean,
-            cv_rmse_std=result.cv_rmse_std,
-            cv_rmse_folds=result.cv_rmse_folds,
-            train_rows=result.train_rows,
-            train_wells=result.train_wells,
-            config_path=args.config,
             tcn_state_dict=tcn_state,
             tcn_target_scaler=tcn_meta.get("y_scaler"),
-            tcn_window_size=tcn_meta.get("window_size", window_size),
+            tcn_window_size=tcn_meta.get("window_size", tcn["window_size"]),
             tcn_feature_columns=result.feature_columns,
-            tcn_num_channels=tcn_meta.get("num_channels", list(tcn_channels)),
-            tcn_kernel_size=tcn_meta.get("kernel_size", tcn_kernel_size),
-            tcn_dropout=tcn_meta.get("dropout", tcn_dropout),
+            tcn_num_channels=tcn_meta.get("num_channels", list(tcn["num_channels"])),
+            tcn_kernel_size=tcn_meta.get("kernel_size", tcn["kernel_size"]),
+            tcn_dropout=tcn_meta.get("dropout", tcn["dropout"]),
             tcn_input_scaler=tcn_meta.get("x_scaler"),
             tcn_input_size=tcn_meta.get("input_size"),
         )
@@ -252,54 +295,20 @@ def main() -> None:
             strat_tvt_bins=strat_tvt_bins,
             strat_spatial_clusters=strat_spatial_clusters,
             model_params=model_params,
-            include_tvt_input=include_tvt_input,
-            include_geometry=include_geometry,
-            include_gr=include_gr,
-            include_gr_dwt=include_gr_dwt,
-            include_trajectory=include_trajectory,
-            include_typewell=include_typewell,
-            include_spatial=include_spatial,
-            include_dtw=include_dtw,
-            include_geology=include_geology,
-            include_beam=include_beam,
-            include_formation_plane=include_formation_plane,
-            include_z_drift=include_z_drift,
             residual_target=residual_target,
             baseline_method=baseline_method,
             eval_postproc=args.eval_postproc,
+            **ff,
         )
 
-        feature_flags = make_feature_flags(
-            include_tvt_input=include_tvt_input and not residual_target,
-            include_geometry=include_geometry,
-            include_gr=include_gr,
-            include_trajectory=include_trajectory,
-            include_typewell=include_typewell,
-            include_gr_dwt=include_gr_dwt,
-            include_spatial=include_spatial,
-            include_dtw=include_dtw,
-            include_geology=include_geology,
-            include_beam=include_beam,
-            include_formation_plane=include_formation_plane,
-            include_z_drift=include_z_drift,
-        )
+        ff_lgbm = dict(ff)
+        ff_lgbm["include_tvt_input"] = ff["include_tvt_input"] and not residual_target
+        feature_flags = make_feature_flags(**ff_lgbm)
+
         payload = build_model_payload(
-            models=result.models,
-            feature_columns=result.feature_columns,
-            residual_target=result.residual_target,
-            baseline_method=result.baseline_method,
+            **_common_payload(result, n_splits, run_cfg, args.config),
             feature_flags=feature_flags,
-            model_type=str(model_config.get("type", "lightgbm")),
-            run_name=run_config.get("name"),
-            seed_list=result.seed_list,
-            n_splits=n_splits,
-            cv_strategy=result.cv_strategy,
-            cv_rmse_mean=result.cv_rmse_mean,
-            cv_rmse_std=result.cv_rmse_std,
-            cv_rmse_folds=result.cv_rmse_folds,
-            train_rows=result.train_rows,
-            train_wells=result.train_wells,
-            config_path=args.config,
+            model_type=model_type,
             model_params=model_params,
             clip_lower=result.clip_bounds[0] if result.clip_bounds else None,
             clip_upper=result.clip_bounds[1] if result.clip_bounds else None,
@@ -308,36 +317,7 @@ def main() -> None:
     with open(output_model, "wb") as f:
         pickle.dump(payload, f)
 
-    print(f"CV strategy: {result.cv_strategy}")
-    print(f"Seeds ({len(result.seed_list)}): {result.seed_list}")
-    print(f"Target mode: {'residual (delta)' if result.residual_target else 'direct (TVT)'}")
-    print(f"Feature columns ({len(result.feature_columns)}): {result.feature_columns}")
-    print(f"CV RMSE (mean ± std): {result.cv_rmse_mean:.6f} ± {result.cv_rmse_std:.6f}")
-    print(f"CV fold scores: {[round(s, 6) for s in result.cv_rmse_folds]}")
-    print(f"Train rows (post-PS): {result.train_rows}")
-    print(f"Train wells: {result.train_wells}")
-    print(f"Model saved: {output_model}")
-
-    # --- Log to MLflow ---
-    mlflow_metrics = {
-        "cv_rmse_mean": result.cv_rmse_mean,
-        "cv_rmse_std": result.cv_rmse_std,
-        "train_rows": result.train_rows,
-        "train_wells": result.train_wells,
-        "n_features": len(result.feature_columns),
-    }
-    for i, score in enumerate(result.cv_rmse_folds):
-        mlflow_metrics[f"cv_rmse_fold_{i + 1}"] = score
-    log_metrics(mlflow_metrics, run=mlflow_run)
-    log_artifact(output_model, run=mlflow_run)
-    end_run(mlflow_run)
-
-    if args.save_oof and result.oof_df is not None:
-        from rogii.oof import save_oof
-        run_name = run_config.get("name", "unknown")
-        strategy = str(model_config.get("type", "lgbm"))
-        oof_path = save_oof(result.oof_df, "outputs", f"{run_name}_{strategy}")
-        print(f"OOF saved: {oof_path}")
+    _report_results(result, output_model, mlflow_run, run_name, model_type, args.save_oof)
 
 
 if __name__ == "__main__":
