@@ -21,7 +21,7 @@ def _import_mlflow():
 def setup_tracking(tracking_uri: str | None = None) -> None:
     """Configure MLflow tracking URI."""
     mlflow = _import_mlflow()
-    uri = tracking_uri or os.environ.get("MLFLOW_TRACKING_URI", "mlruns")
+    uri = tracking_uri or os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
     mlflow.set_tracking_uri(uri)
 
 
@@ -63,7 +63,4 @@ def log_artifact(local_path: str | Path, run: Any | None = None) -> None:
 def end_run(run: Any | None = None) -> None:
     """End the active MLflow run."""
     mlflow = _import_mlflow()
-    if run is not None:
-        mlflow.end_run(run.info.run_id)
-    else:
-        mlflow.end_run()
+    mlflow.end_run()

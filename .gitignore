@@ -4,6 +4,7 @@ outputs/
 models/
 submissions/
 mlruns/
+mlflow.db
 kaggle_datasets/
 wheels/
 

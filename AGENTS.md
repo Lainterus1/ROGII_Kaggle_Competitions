@@ -143,7 +143,7 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 
 - At session end, produce a compact handoff for the next agent (format defined in `.agents/skills/handoff/SKILL.md`).
 - Create project-specific skills only for workflows likely to repeat at least three times or to protect high-risk actions.
-- Useful skill candidates: data inventory, submission validation, Kaggle runner workflow, MLflow experiment logging, leakage review and documentation maintenance.
+- Useful skill candidates: data inventory, submission validation, Kaggle runner workflow, MLflow experiment logging, leakage review, documentation maintenance, and Linear issue management.
 - Skills live under `.agents/skills/*/SKILL.md`.
 - Do not create generic skills that duplicate this file.
 

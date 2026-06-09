@@ -9,6 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rogii.config import load_yaml_config
+from rogii.mlflow_utils import default_experiment_name, end_run, log_artifact, log_metrics, log_params, setup_tracking, start_run
 from rogii.model_io import build_model_payload, make_feature_flags
 from rogii.train import run_train
 
@@ -129,12 +130,41 @@ def main() -> None:
     include_z_drift = _bool_setting(args.include_z_drift, feature_config, "include_z_drift")
     residual_target = _bool_setting(args.residual_target, feature_config, "residual_target")
     baseline_method = args.baseline_method or feature_config.get("baseline_method", "flat")
+    model_type = args.model_type or str(model_config.get("type", "lightgbm"))
+    seed = args.seed or int(run_config.get("seed", 42))
+
+    # --- MLflow tracking ---
+    run_name = run_config.get("name", "rogii-run")
+    exp_name = run_config.get("experiment_name", default_experiment_name())
+    setup_tracking()
+    mlflow_run = start_run(run_name=run_name, experiment_name=exp_name)
+    mlflow_params = {
+        "model_type": model_type,
+        "n_splits": n_splits,
+        "n_seeds": len(seed_list),
+        "seed_list": str(seed_list),
+        "cv_strategy": cv_strategy,
+        "residual_target": residual_target,
+        "baseline_method": baseline_method,
+        "include_geometry": include_geometry,
+        "include_gr": include_gr,
+        "include_gr_dwt": include_gr_dwt,
+        "include_tvt_input": include_tvt_input,
+        "include_trajectory": include_trajectory,
+        "include_typewell": include_typewell,
+        "include_spatial": include_spatial,
+        "include_dtw": include_dtw,
+        "include_geology": include_geology,
+        "include_beam": include_beam,
+        "include_formation_plane": include_formation_plane,
+        "include_z_drift": include_z_drift,
+        "config_file": args.config or "none",
+    }
+    mlflow_params.update({f"model_param_{k}": v for k, v in model_params.items()})
+    log_params(mlflow_params, run=mlflow_run)
 
     model_dir = Path(output_model).parent
     model_dir.mkdir(parents=True, exist_ok=True)
-
-    model_type = args.model_type or str(model_config.get("type", "lightgbm"))
-    seed = args.seed or int(run_config.get("seed", 42))
 
     if model_type == "tcn":
         from rogii.train import train_tcn
@@ -287,6 +317,20 @@ def main() -> None:
     print(f"Train rows (post-PS): {result.train_rows}")
     print(f"Train wells: {result.train_wells}")
     print(f"Model saved: {output_model}")
+
+    # --- Log to MLflow ---
+    mlflow_metrics = {
+        "cv_rmse_mean": result.cv_rmse_mean,
+        "cv_rmse_std": result.cv_rmse_std,
+        "train_rows": result.train_rows,
+        "train_wells": result.train_wells,
+        "n_features": len(result.feature_columns),
+    }
+    for i, score in enumerate(result.cv_rmse_folds):
+        mlflow_metrics[f"cv_rmse_fold_{i + 1}"] = score
+    log_metrics(mlflow_metrics, run=mlflow_run)
+    log_artifact(output_model, run=mlflow_run)
+    end_run(mlflow_run)
 
     if args.save_oof and result.oof_df is not None:
         from rogii.oof import save_oof
