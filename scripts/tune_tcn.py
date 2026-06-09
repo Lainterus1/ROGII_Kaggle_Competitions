@@ -136,7 +136,7 @@ def load_and_norm(data_dir: str):
         x = s.X.astype(np.float64)
         mean = x.mean(axis=0, keepdims=True)
         std = x.std(axis=0, keepdims=True)
-        std = np.where(std < 1e-8, 1.0, std)
+        std = np.clip(std, 1e-8, None)
         s.X = torch.from_numpy(((x - mean) / std).astype(np.float32)).T.contiguous()
 
     return sequences
@@ -162,13 +162,13 @@ def fit_target_scaler(sequences, indices: np.ndarray) -> StandardScaler | None:
 
 
 def scaled_sequences(sequences, indices: np.ndarray, scaler: StandardScaler | None):
-    result = []
+    out = []
     for i in indices:
         y = np.asarray(sequences[i].y, dtype=np.float64)
         if scaler is not None:
             y = scaler.transform(y.reshape(-1, 1)).ravel()
-        result.append(replace(sequences[i], y=torch.from_numpy(y.astype(np.float32))))
-    return result
+        out.append(replace(sequences[i], y=torch.from_numpy(y.astype(np.float32))))
+    return out
 
 
 def inverse_target(values: np.ndarray, scaler: StandardScaler | None) -> np.ndarray:
@@ -182,10 +182,10 @@ def evaluate_validation(model, val_loader, criterion, target_scaler, device: str
     total_loss = 0.0
     pred_parts: list[np.ndarray] = []
     true_parts: list[np.ndarray] = []
-    with torch.no_grad():
+    with torch.inference_mode():
         for xb, yb in val_loader:
-            xb = xb.to(device, non_blocking=True)
-            yb = yb.to(device, non_blocking=True)
+            xb = xb.to(device)
+            yb = yb.to(device)
             pred = model(xb)
             total_loss += criterion(pred, yb).item() * xb.size(0)
             pred_parts.append(pred.detach().cpu().numpy().ravel())
@@ -256,6 +256,8 @@ def run_one_fold(sequences, train_idx: np.ndarray, val_idx: np.ndarray, fold_idx
                 with torch.amp.autocast("cuda"):
                     loss = criterion(model(xb), yb)
                 amp.scale(loss).backward()
+                amp.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 amp.step(optimizer)
                 amp.update()
             else:
@@ -290,9 +292,6 @@ def run_one_fold(sequences, train_idx: np.ndarray, val_idx: np.ndarray, fold_idx
             print(f"  Early stop: best epoch {best_epoch}, best_rmse={best_rmse:.4f}", flush=True)
             break
 
-    del model, optimizer, train_loader, val_loader
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
     return FoldResult(fold_idx=fold_idx, best_epoch=best_epoch, best_rmse_delta=best_rmse, best_val_mse=best_mse)
 
 
@@ -314,20 +313,16 @@ def evaluate_config(sequences, folds, fold_ids: list[int], channels: list[int], 
 
 
 def print_run_train_command(channels: list[int], lr: float, args: argparse.Namespace) -> None:
-    channels_arg = ",".join(str(c) for c in channels)
-    command = (
-        "python scripts/run_train.py --model-type tcn --config configs/a5_tcn.yaml "
-        "--data-dir data --save-oof "
-        f"--tcn-channels {channels_arg} --tcn-lr {lr} "
+    ch = ",".join(str(c) for c in channels)
+    cmd = (
+        f"python scripts/run_train.py --model-type tcn --config configs/a5_tcn.yaml "
+        f"--data-dir data --save-oof --tcn-channels {ch} --tcn-lr {lr} "
         f"--tcn-window {args.window} --tcn-stride {args.stride} "
         f"--tcn-batch-size {args.batch_size} --tcn-epochs <FINAL_EPOCHS> "
         f"--tcn-kernel-size {args.kernel_size} --tcn-dropout {args.dropout} "
         f"--tcn-patience {args.patience if args.patience > 0 else 5}"
     )
-    print("\n=== RECOMMENDATION ===")
-    print(f"  --tcn-channels {channels_arg}")
-    print(f"  --tcn-lr {lr}")
-    print(f"  final train command:\n  {command}")
+    print(f"\n=== RECOMMENDATION ===\n  --tcn-channels {ch}\n  --tcn-lr {lr}\n  final train command:\n  {cmd}")
     if args.folds.lower() != "all":
         print("  before promotion: rerun this tuner with --folds all")
 
