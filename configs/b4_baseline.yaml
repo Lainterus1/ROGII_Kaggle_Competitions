@@ -1,0 +1,39 @@
+run:
+  name: b4_baseline
+  seed_list: [42, 7, 123]
+
+model:
+  type: lightgbm
+  params:
+    learning_rate: 0.0664
+    num_leaves: 48
+    min_child_samples: 60
+    subsample: 0.7164
+    colsample_bytree: 0.7328
+    reg_alpha: 0.001539
+    reg_lambda: 0.0004334
+    min_child_weight: 0.009634
+  early_stopping_rounds: 50
+
+features:
+  set_name: r1_optimized
+  include_geometry: true
+  include_gr: true
+  residual_target: true
+
+validation:
+  strategy: group
+  n_splits: 5
+
+postproc:
+  tune: true
+  savgol_windows: [5, 11, 17, 25, 31, 41, 51]
+  savgol_polyorders: [2, 3]
+  clip_percentiles:
+    - [0.1, 99.9]
+    - [0.5, 99.5]
+    - [1.0, 99.0]
+  min_delta: 0.01
+
+artifacts:
+  model_path: models/b4_baseline.pkl

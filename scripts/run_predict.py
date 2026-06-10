@@ -11,7 +11,7 @@ from rogii.data_loading import sample_submission_path
 from rogii.model_io import make_feature_flags, resolve_prediction_contract
 from rogii.postprocess import apply_postprocess_blend, parse_blend_weights
 from rogii.predict import run_predict
-from rogii.smoothing import apply_postprocessing
+from rogii.smoothing import PostprocConfig, apply_postprocessing
 from rogii.submission import validate_submission
 
 
@@ -36,10 +36,12 @@ def parse_args() -> ArgumentParser:
     parser.add_argument("--baseline-method", default="flat", choices=["flat", "slope_md", "slope_z", "slope_recent", "wls"],
                         help="Baseline construction method for residual target (auto-detected from payload)")
     parser.add_argument("--savgol-smooth", action="store_true", help="Apply per-well Savgol smoothing to final predictions")
-    parser.add_argument("--savgol-window", type=int, default=31, help="Savgol filter window length (odd, default 31)")
-    parser.add_argument("--savgol-polyorder", type=int, default=2, help="Savgol filter polynomial order (default 2)")
+    parser.add_argument("--savgol-window", type=int, default=None, help="Savgol filter window length (odd, default 31)")
+    parser.add_argument("--savgol-polyorder", type=int, default=None, help="Savgol filter polynomial order (default 2)")
     parser.add_argument("--tvt-clip", action="store_true",
                         help="Apply TVT clipping (uses bounds from model payload if available)")
+    parser.add_argument("--no-postproc", action="store_true",
+                        help="Disable all post-processing (ignore payload and CLI defaults)")
     parser.add_argument("--postprocess-blend", action="store_true",
                         help="Apply 3-strategy blend: model + Z-physics + DTW GR matching")
     parser.add_argument("--blend-weights", type=str, default=None,
@@ -123,30 +125,80 @@ def main() -> None:
             feature_columns=contract.feature_columns,
         )
 
-    apply_savgol = args.savgol_smooth
-    apply_clip = args.tvt_clip
+    # --- Post-processing resolution ---
+    # Priority: --no-postproc > explicit CLI > payload postproc > legacy
+
     blend_weights = parse_blend_weights(args.blend_weights)
 
     if args.postprocess_blend:
         submission = apply_postprocess_blend(submission, args.data_dir, weights=blend_weights)
 
-    # Auto-detect clip bounds from payload
-    clip_lower: float | None = None
-    clip_upper: float | None = None
-    if apply_clip and isinstance(payload, dict):
-        clip_lower = payload.get("clip_lower")
-        clip_upper = payload.get("clip_upper")
-        if clip_lower is None or clip_upper is None:
-            print("Warning: --tvt-clip requested but model payload has no clip bounds. Skipping clipping.")
+    if args.no_postproc:
+        apply_savgol = False
+        apply_clip = False
+        savgol_window: int | None = None
+        savgol_polyorder: int = 2
+        clip_lower: float | None = None
+        clip_upper: float | None = None
+        apply_order = "clip_smooth"
+        postproc_source = "none (--no-postproc)"
+    else:
+        has_cli_override = (
+            args.savgol_window is not None
+            or args.savgol_polyorder is not None
+            or args.tvt_clip
+            or args.savgol_smooth
+        )
+        if has_cli_override:
+            apply_savgol = args.savgol_smooth or args.savgol_window is not None
+            savgol_window = args.savgol_window if args.savgol_window is not None else (31 if apply_savgol else None)
+            savgol_polyorder = args.savgol_polyorder if args.savgol_polyorder is not None else 2
+            apply_clip = args.tvt_clip
+            if apply_clip and isinstance(payload, dict):
+                clip_lower = payload.get("clip_lower")
+                clip_upper = payload.get("clip_upper")
+                if clip_lower is None or clip_upper is None:
+                    print("Warning: --tvt-clip but no clip bounds in payload. Skipping clipping.")
+                    apply_clip = False
+            else:
+                clip_lower = None
+                clip_upper = None
+            apply_order = "clip_smooth"
+            postproc_source = "CLI override"
+        elif contract.postproc_config is not None:
+            try:
+                pc = PostprocConfig.from_dict(contract.postproc_config)
+                pc.validate()
+                apply_savgol = pc.savgol_window is not None
+                savgol_window = pc.savgol_window
+                savgol_polyorder = pc.savgol_polyorder
+                apply_clip = pc.clip_lower is not None and pc.clip_upper is not None
+                clip_lower = pc.clip_lower
+                clip_upper = pc.clip_upper
+                apply_order = pc.apply_order
+                postproc_source = "payload"
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid postproc config in model payload: {e}"
+                ) from e
+        else:
+            apply_savgol = False
             apply_clip = False
+            savgol_window = None
+            savgol_polyorder = 2
+            clip_lower = None
+            clip_upper = None
+            apply_order = "clip_smooth"
+            postproc_source = "none (legacy)"
 
     if apply_clip or apply_savgol:
         submission = apply_postprocessing(
             submission,
-            savgol_window=args.savgol_window if apply_savgol else None,
-            savgol_polyorder=args.savgol_polyorder,
+            savgol_window=savgol_window if apply_savgol else None,
+            savgol_polyorder=savgol_polyorder,
             clip_lower=clip_lower if apply_clip else None,
             clip_upper=clip_upper if apply_clip else None,
+            apply_order=apply_order,
         )
 
     submission.to_csv(output, index=False)
@@ -157,7 +209,7 @@ def main() -> None:
         print(f"Feature columns ({len(contract.feature_columns)}): {contract.feature_columns}")
     print(f"Baseline method: {contract.baseline_method}")
     if apply_savgol:
-        print(f"Savgol smoothing: ON (window={args.savgol_window}, polyorder={args.savgol_polyorder})")
+        print(f"Savgol smoothing: ON (window={savgol_window}, polyorder={savgol_polyorder})")
     else:
         print("Savgol smoothing: OFF")
     if apply_clip:
@@ -173,6 +225,7 @@ def main() -> None:
         print("3-strategy blend: OFF")
     print(f"Submission rows: {result.rows}")
     print(f"Wrote submission: {output}")
+    print(f"Postproc source: {postproc_source}")
 
 
 if __name__ == "__main__":

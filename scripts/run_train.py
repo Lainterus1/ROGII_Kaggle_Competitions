@@ -134,14 +134,63 @@ def _report_results(result, output_model: str, mlflow_run, run_name: str,
     }
     for i, score in enumerate(result.cv_rmse_folds):
         metrics[f"cv_rmse_fold_{i + 1}"] = score
-    log_metrics(metrics, run=mlflow_run)
-    log_artifact(output_model, run=mlflow_run)
-    end_run(mlflow_run)
 
+    # Save OOF before MLflow artifact logging (avoids OS-level lock issues on Windows)
     if save_oof and result.oof_df is not None:
         from rogii.oof import save_oof
         oof_path = save_oof(result.oof_df, "outputs", f"{run_name}_{model_type}")
         print(f"OOF saved: {oof_path}")
+
+    # Log postproc results
+    if result.best_postproc is not None:
+        pc = result.best_postproc
+        log_params({
+            "postproc_savgol_window": pc.savgol_window,
+            "postproc_savgol_polyorder": pc.savgol_polyorder,
+            "postproc_clip_lower": pc.clip_lower,
+            "postproc_clip_upper": pc.clip_upper,
+            "postproc_apply_order": pc.apply_order,
+        }, run=mlflow_run)
+        if result.postproc_results:
+            import json as _json
+            import tempfile
+            postproc_grid_csv = "config,rmse,delta_vs_raw,delta_vs_current\n"
+            for r in result.postproc_results:
+                cfg_str = str(r.config.to_dict()).replace(",", ";")
+                postproc_grid_csv += (
+                    f"{cfg_str},{r.rmse:.6f},"
+                    f"{r.delta_vs_raw or 0:.6f},"
+                    f"{r.delta_vs_current or 0:.6f}\n"
+                )
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".csv", delete=False, encoding="utf-8",
+            ) as f:
+                f.write(postproc_grid_csv)
+                try:
+                    log_artifact(f.name, run=mlflow_run)
+                finally:
+                    try:
+                        Path(f.name).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            best_json = _json.dumps(result.best_postproc.to_dict(), indent=2)
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False, encoding="utf-8",
+            ) as f:
+                f.write(best_json)
+                try:
+                    log_artifact(f.name, run=mlflow_run)
+                finally:
+                    try:
+                        Path(f.name).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+            metrics["cv_rmse_best_postproc"] = result.postproc_results[0].rmse
+
+    log_metrics(metrics, run=mlflow_run)
+    log_artifact(output_model, run=mlflow_run)
+    end_run(mlflow_run)
 
 
 def _common_payload(result, n_splits: int, run_cfg: dict[str, Any],
@@ -200,6 +249,14 @@ def parse_args() -> ArgumentParser:
                         help="Baseline construction method for residual target")
     parser.add_argument("--eval-postproc", action="store_true",
                         help="Evaluate Savgol smoothing + TVT clipping on OOF CV predictions")
+    parser.add_argument("--postproc-savgol-windows", type=str, default=None,
+                        help="Comma-separated Savgol windows for grid search (e.g. '5,11,17,25,31,41,51')")
+    parser.add_argument("--postproc-savgol-polyorders", type=str, default=None,
+                        help="Comma-separated Savgol polyorders for grid search (e.g. '2,3')")
+    parser.add_argument("--postproc-clip-percentiles", type=str, default=None,
+                        help="Comma-separated percentile pairs for clip grid (e.g. '0.1:99.9,0.5:99.5')")
+    parser.add_argument("--postproc-min-delta", type=float, default=0.01,
+                        help="Minimum RMSE improvement to accept new postproc config (default 0.01)")
     parser.add_argument("--early-stopping-rounds", type=int, default=None,
                         help="Early stopping rounds (default from config or 50)")
     parser.add_argument("--save-oof", action="store_true",
@@ -261,6 +318,53 @@ def main() -> None:
             raw = Path(raw[1:]).read_text(encoding="utf-8")
         model_params.update(_json.loads(raw))
     early_stopping_rounds = _val(args.early_stopping_rounds, model_cfg, "early_stopping_rounds", 50, int)
+
+    # --- Postproc grid ---
+    postproc_grid = None
+    postproc_tune = args.eval_postproc
+    if postproc_tune:
+        from rogii.smoothing import (
+            PostprocParamGrid,
+            parse_int_list,
+            parse_percentile_pairs,
+        )
+        pg_section = _section(config, "postproc") if config else {}
+        pg_tune = pg_section.get("tune", True) if pg_section else True
+        if not pg_tune:
+            postproc_tune = False
+        else:
+            sw_raw = args.postproc_savgol_windows or pg_section.get("savgol_windows")
+            sp_raw = args.postproc_savgol_polyorders or pg_section.get("savgol_polyorders")
+            cp_raw = args.postproc_clip_percentiles or pg_section.get("clip_percentiles")
+            min_delta = args.postproc_min_delta or pg_section.get("min_delta", 0.01)
+
+            savgol_windows: tuple[int, ...] = (5, 11, 17, 25, 31, 41, 51)
+            savgol_polyorders: tuple[int, ...] = (2, 3)
+            clip_percentiles: tuple[tuple[float, float], ...] = ((0.1, 99.9), (0.5, 99.5), (1.0, 99.0))
+
+            if sw_raw is not None:
+                if isinstance(sw_raw, list):
+                    savgol_windows = tuple(int(x) for x in sw_raw)
+                else:
+                    savgol_windows = tuple(parse_int_list(sw_raw))
+            if sp_raw is not None:
+                if isinstance(sp_raw, list):
+                    savgol_polyorders = tuple(int(x) for x in sp_raw)
+                else:
+                    savgol_polyorders = tuple(parse_int_list(sp_raw))
+            if cp_raw is not None:
+                if isinstance(cp_raw, list):
+                    clip_percentiles = tuple(
+                        (float(p[0]), float(p[1])) for p in cp_raw
+                    )
+                else:
+                    clip_percentiles = tuple(parse_percentile_pairs(cp_raw))
+
+            postproc_grid = PostprocParamGrid(
+                savgol_windows=savgol_windows,
+                savgol_polyorders=savgol_polyorders,
+                clip_percentiles=clip_percentiles,
+            )
 
     # Feature flags (dict with all 12 feature keys + residual_target + baseline_method)
     ff = _resolve_feature_flags(args, feat_cfg)
@@ -328,7 +432,8 @@ def main() -> None:
             model_params=model_params,
             residual_target=residual_target,
             baseline_method=baseline_method,
-            eval_postproc=args.eval_postproc,
+            eval_postproc=postproc_tune,
+            postproc_grid=postproc_grid,
             early_stopping_rounds=early_stopping_rounds,
             **ff,
         )
@@ -342,8 +447,7 @@ def main() -> None:
             feature_flags=feature_flags,
             model_type=model_type,
             model_params=model_params,
-            clip_lower=result.clip_bounds[0] if result.clip_bounds else None,
-            clip_upper=result.clip_bounds[1] if result.clip_bounds else None,
+            postproc_config=result.best_postproc,
         )
 
     with open(output_model, "wb") as f:

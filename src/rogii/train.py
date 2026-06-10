@@ -5,7 +5,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -14,16 +14,8 @@ from rogii.data_loading import list_well_ids, read_horizontal_well, read_typewel
 from rogii.features import SAFE_NUMERIC_FEATURES, build_features, last_known_tvt_input_value, post_ps_mask
 from rogii.metrics import rmse
 
-
-@dataclass(frozen=True)
-class PostprocResult:
-    raw_rmse: float
-    postproc_rmse: float
-    savgol_window: int | None
-    savgol_polyorder: int
-    clip_lower: float | None
-    clip_upper: float | None
-    label: str
+if TYPE_CHECKING:
+    from rogii.smoothing import PostprocConfig, PostprocParamGrid, PostprocResult
 
 
 @dataclass(frozen=True)
@@ -39,7 +31,8 @@ class TrainResult:
     cv_strategy: str = "group"
     residual_target: bool = False
     baseline_method: str = "flat"
-    postproc_results: list[PostprocResult] | None = None
+    postproc_results: list["PostprocResult"] | None = None
+    best_postproc: "PostprocConfig | None" = None
     clip_bounds: tuple[float, float] | None = None
     oof_df: "pd.DataFrame | None" = None
     tcn_metadata: dict | None = None
@@ -320,130 +313,93 @@ def _reconstruct_full(oof_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     )
 
 
-def _evaluate_postproc_config(
-    oof_df: pd.DataFrame,
-    savgol_window: int | None,
-    savgol_polyorder: int,
-    clip_lower: float | None,
-    clip_upper: float | None,
-    label: str,
-) -> PostprocResult:
-    """Evaluate a single post-processing config on OOF predictions.
-
-    Works in full TVT space: reconstructs delta->full, clips, smooths,
-    computes RMSE in full TVT.
-    """
-    oof_copy = oof_df.copy()
-
-    # Reconstruct to full TVT
-    oof_copy["y_true_full"] = oof_copy["y_true"] + oof_copy["baseline"]
-    oof_copy["y_pred_full"] = oof_copy["y_pred"] + oof_copy["baseline"]
-
-    # Sort by (well_id, row_idx) for per-well processing
-    oof_copy = oof_copy.sort_values(["well_id", "row_idx"]).reset_index(drop=True)
-
-    # Per-well clip + smooth
-    y_pred_pp = np.zeros(len(oof_copy), dtype=float)
-    for wid, group in oof_copy.groupby("well_id", sort=False):
-        preds = group["y_pred_full"].to_numpy(dtype=float)
-        if clip_lower is not None and clip_upper is not None:
-            preds = preds.clip(clip_lower, clip_upper)
-        if savgol_window is not None and len(preds) > savgol_window:
-            from scipy.signal import savgol_filter
-            preds = savgol_filter(preds, savgol_window, savgol_polyorder)
-        y_pred_pp[group.index] = preds
-
-    y_true_full = oof_copy["y_true_full"].to_numpy(dtype=float)
-    y_pred_raw_full = oof_copy["y_pred_full"].to_numpy(dtype=float)
-
-    raw = rmse(y_true_full, y_pred_raw_full)
-    pp = rmse(y_true_full, y_pred_pp)
-
-    return PostprocResult(
-        raw_rmse=raw,
-        postproc_rmse=pp,
-        savgol_window=savgol_window,
-        savgol_polyorder=savgol_polyorder,
-        clip_lower=clip_lower,
-        clip_upper=clip_upper,
-        label=label,
-    )
-
-
 def evaluate_postprocessing(
     oof_rows: list[tuple[str, int, int, float, float, float]],
     savgol_windows: list[int],
     savgol_polyorders: list[int],
     clip_configs: list[tuple[float | None, float | None, str]],
-) -> list[PostprocResult]:
+) -> tuple[list["PostprocResult"], "PostprocConfig | None"]:
     """Evaluate multiple post-processing configurations on OOF predictions.
 
+    Delegates to ``smoothing.grid_search_postprocessing`` for the core
+    search.  Also returns the best config (with ``min_delta=0.01`` guard).
+
     Args:
-        oof_rows: List of (well_id, row_idx, y_true, y_pred, baseline) tuples.
-            y_true/y_pred are in delta space (if residual) or full TVT space.
-            baseline is the reconstruction constant (0 for non-residual mode).
+        oof_rows: List of (well_id, row_idx, fold, y_true, y_pred, baseline).
         savgol_windows: Savgol window sizes to test.
         savgol_polyorders: Savgol polyorders to test.
         clip_configs: List of (lower, upper, label) clipping configs.
 
     Returns:
-        List of PostprocResult sorted by postproc_rmse ascending.
-        All RMSE values are in FULL TVT space.
+        (results, best_config) — results sorted by RMSE ascending.
     """
+    from rogii.smoothing import (
+        PostprocConfig,
+        PostprocParamGrid,
+        PostprocResult,
+        grid_search_postprocessing,
+        select_best_postproc,
+    )
+
     oof_df = _build_oof_per_well(oof_rows)
-    y_true_full, y_pred_full = _reconstruct_full(oof_df)
 
-    results: list[PostprocResult] = []
+    clip_bounds_map: dict[str, tuple[float, float]] = {}
+    for lower, upper, label in clip_configs:
+        if lower is not None and upper is not None:
+            clip_bounds_map[label] = (lower, upper)
 
-    # No postprocessing baseline
-    raw = rmse(y_true_full, y_pred_full)
-    results.append(PostprocResult(
-        raw_rmse=raw, postproc_rmse=raw,
-        savgol_window=None, savgol_polyorder=0,
-        clip_lower=None, clip_upper=None,
-        label="raw (no postproc)",
-    ))
+    grid = PostprocParamGrid(
+        savgol_windows=tuple(savgol_windows),
+        savgol_polyorders=tuple(savgol_polyorders),
+    )
 
-    # Clip-only configs
-    for clip_lower, clip_upper, clip_label in clip_configs:
-        if clip_lower is not None:
-            r = _evaluate_postproc_config(oof_df, None, 0, clip_lower, clip_upper, f"clip {clip_label}")
-            results.append(r)
+    results = grid_search_postprocessing(oof_df, grid, clip_bounds_map)
 
-    # Smooth-only configs
-    for w in savgol_windows:
-        for p in savgol_polyorders:
-            if w <= p:
-                continue
-            r = _evaluate_postproc_config(oof_df, w, p, None, None, f"savgol w={w} p={p}")
-            results.append(r)
+    # Fill delta_vs_current vs the current Savgol w=31 p=2 baseline
+    current_cfg = PostprocConfig(savgol_window=31, savgol_polyorder=2)
+    current_rmse: float | None = None
+    for r in results:
+        if r.config == current_cfg:
+            current_rmse = r.rmse
+            break
+    if current_rmse is not None:
+        results = [
+            PostprocResult(
+                config=r.config,
+                rmse=r.rmse,
+                delta_vs_raw=r.delta_vs_raw,
+                delta_vs_current=r.rmse - current_rmse,
+            )
+            for r in results
+        ]
 
-    # Smooth + clip configs
-    for w in savgol_windows:
-        for p in savgol_polyorders:
-            if w <= p:
-                continue
-            for clip_lower, clip_upper, clip_label in clip_configs:
-                if clip_lower is None:
-                    continue
-                r = _evaluate_postproc_config(
-                    oof_df, w, p, clip_lower, clip_upper,
-                    f"clip {clip_label} + savgol w={w} p={p}",
-                )
-                results.append(r)
+    best = select_best_postproc(results, current_cfg)
 
-    results.sort(key=lambda r: r.postproc_rmse)
-    return results
+    return results, best
 
 
-def _print_postproc_results(results: list[PostprocResult]) -> None:
-    header = f"{'Label':<45} {'Raw':>8} {'PostProc':>10} {'Delta':>8}"
+def _print_postproc_results(results: list["PostprocResult"]) -> None:
+    header = f"{'Config':<48} {'RMSE':>10} {'vs Raw':>8} {'vs Cur':>8}"
     print(f"\n{header}")
-    print("-" * 75)
-    baseline = results[0].postproc_rmse
+    print("-" * 78)
     for r in results[:15]:
-        delta = r.postproc_rmse - baseline
-        print(f"{r.label:<45} {r.raw_rmse:8.4f} {r.postproc_rmse:10.4f} {delta:+8.4f}")
+        cfg = r.config
+        parts = []
+        if cfg.savgol_window is None and cfg.clip_lower is None and cfg.clip_upper is None:
+            label = "raw (no postproc)"
+        elif cfg.savgol_window == 31 and cfg.savgol_polyorder == 2 and cfg.clip_lower is None:
+            label = "current (Savgol w=31 p=2)"
+        else:
+            if cfg.savgol_window is not None:
+                parts.append(f"w={cfg.savgol_window} p={cfg.savgol_polyorder}")
+            else:
+                parts.append("nosmooth")
+            if cfg.clip_lower is not None:
+                parts.append(f"clip[{cfg.clip_lower:.0f},{cfg.clip_upper:.0f}]")
+            label = " + ".join(parts)
+        delta_raw = r.delta_vs_raw or 0.0
+        delta_cur = r.delta_vs_current or 0.0
+        print(f"{label:<48} {r.rmse:10.4f} {delta_raw:+8.4f} {delta_cur:+8.4f}")
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +620,7 @@ def run_train(
     residual_target: bool = False,
     baseline_method: str = "flat",
     eval_postproc: bool = False,
+    postproc_grid: "PostprocParamGrid | None" = None,
     early_stopping_rounds: int | None = 50,
     validation_fraction: float = 0.1,
     progress: bool = True,
@@ -853,7 +810,8 @@ def run_train(
 
     # --- Post-processing evaluation ---
     clip_bounds: tuple[float, float] | None = None
-    postproc_results: list[PostprocResult] | None = None
+    postproc_results: list["PostprocResult"] | None = None
+    best_postproc: "PostprocConfig | None" = None
     if eval_postproc:
         from rogii.smoothing import compute_tvt_clip_bounds
         try:
@@ -862,23 +820,23 @@ def run_train(
             clip_bounds = None
 
     if eval_postproc and oof_rows:
-        savgol_windows = [5, 11, 17, 25, 31]
-        savgol_polyorders = [2, 3]
+        if postproc_grid is None:
+            from rogii.smoothing import PostprocParamGrid
+            postproc_grid = PostprocParamGrid()
+        savgol_windows = list(postproc_grid.savgol_windows)
+        savgol_polyorders = list(postproc_grid.savgol_polyorders)
         clip_configs: list[tuple[float | None, float | None, str]] = [(None, None, "none")]
         if clip_bounds is not None:
-            low, high = clip_bounds
-            clip_configs = [
-                (None, None, "none"),
-                (low, high, "p0.1-p99.9"),
-            ]
+            clip_configs = [(None, None, "none")]
             try:
-                low_tight, high_tight = compute_tvt_clip_bounds(data_dir, 0.5, 99.5)
-                clip_configs.append((low_tight, high_tight, "p0.5-p99.5"))
-                low_wide, high_wide = compute_tvt_clip_bounds(data_dir, 1.0, 99.0)
-                clip_configs.append((low_wide, high_wide, "p1-p99"))
+                for low_pct, high_pct in postproc_grid.clip_percentiles:
+                    lo, hi = compute_tvt_clip_bounds(data_dir, low_pct, high_pct)
+                    clip_configs.append((lo, hi, f"p{low_pct}-p{high_pct}"))
             except Exception:
                 pass
-        postproc_results = evaluate_postprocessing(oof_rows, savgol_windows, savgol_polyorders, clip_configs)
+        postproc_results, best_postproc = evaluate_postprocessing(
+            oof_rows, savgol_windows, savgol_polyorders, clip_configs,
+        )
         _print_postproc_results(postproc_results)
 
     if profile:
@@ -898,6 +856,7 @@ def run_train(
         residual_target=residual_target,
         baseline_method=baseline_method,
         postproc_results=postproc_results,
+        best_postproc=best_postproc,
         clip_bounds=clip_bounds,
         oof_df=_build_oof_per_well(oof_rows) if oof_rows else None,
     )

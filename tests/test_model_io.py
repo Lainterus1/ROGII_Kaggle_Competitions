@@ -145,3 +145,77 @@ def test_legacy_raw_model_is_wrapped_in_list() -> None:
     contract = resolve_prediction_contract("raw_model")
     assert contract.models == ["raw_model"]
     assert contract.is_multi_seed is False
+
+
+# ---------------------------------------------------------------------------
+# Postproc config in payload
+# ---------------------------------------------------------------------------
+
+def test_postproc_roundtrip_in_payload() -> None:
+    from rogii.smoothing import PostprocConfig
+
+    postproc = PostprocConfig(
+        savgol_window=51, savgol_polyorder=3,
+        clip_lower=5000.0, clip_upper=20000.0,
+        apply_order="clip_smooth",
+    )
+    payload = build_model_payload(
+        models=["model"],
+        feature_columns=["MD", "GR"],
+        residual_target=False,
+        postproc_config=postproc,
+    )
+
+    assert "postproc" in payload
+    pp = payload["postproc"]
+    assert pp["savgol_window"] == 51
+    assert pp["savgol_polyorder"] == 3
+    assert pp["clip_lower"] == 5000.0
+    assert pp["clip_upper"] == 20000.0
+    assert pp["apply_order"] == "clip_smooth"
+
+
+def test_postproc_in_prediction_contract() -> None:
+    from rogii.smoothing import PostprocConfig
+
+    postproc = PostprocConfig(savgol_window=31, savgol_polyorder=2)
+    payload = build_model_payload(
+        models=["model"],
+        feature_columns=["MD"],
+        residual_target=False,
+        postproc_config=postproc,
+    )
+    contract = resolve_prediction_contract(payload)
+    assert contract.postproc_config is not None
+    pp = contract.postproc_config
+    assert pp["savgol_window"] == 31
+    assert pp["savgol_polyorder"] == 2
+
+
+def test_payload_without_postproc_is_none_in_contract() -> None:
+    payload = build_model_payload(
+        models=["model"],
+        feature_columns=["MD"],
+        residual_target=False,
+    )
+    contract = resolve_prediction_contract(payload)
+    assert contract.postproc_config is None
+
+
+def test_postproc_from_dict_roundtrip_in_contract() -> None:
+    from rogii.smoothing import PostprocConfig
+
+    postproc = PostprocConfig(
+        savgol_window=51, savgol_polyorder=3,
+        clip_lower=5000.0, clip_upper=20000.0,
+        apply_order="smooth_clip",
+    )
+    payload = build_model_payload(
+        models=["model"],
+        feature_columns=["MD"],
+        residual_target=False,
+        postproc_config=postproc,
+    )
+    contract = resolve_prediction_contract(payload)
+    restored = PostprocConfig.from_dict(contract.postproc_config)
+    assert restored == postproc

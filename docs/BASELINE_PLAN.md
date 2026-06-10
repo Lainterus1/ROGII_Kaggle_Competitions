@@ -115,13 +115,14 @@ Kaggle run R3 / A4 multi-seed (2026-06-07):
 
 Kaggle run B4 / Optuna-tuned (2026-06-10):
 
-- Config: `configs/b4_tuned.yaml`, best params: `configs/b4_best_params.yaml`
+- Config: `configs/b4_baseline.yaml`, best params: `configs/b4_best_params.yaml`
 - Model: Optuna-tuned 3-seed LightGBM ensemble `[42, 7, 123]`, 18 R1 features, residual delta target
 - Tuning: Optuna TPESampler, 30 trials, 2-fold screening, top-3 verified on 5-fold
 - Best params: `lr=0.0664`, `num_leaves=48`, `min_child_samples=60`, `subsample=0.716`, `colsample_bytree=0.733`, `min_child_weight=0.0096`, `reg_alpha=0.0015`, `reg_lambda=0.0004`
-- Post-processing: Savgol `window=31`, `polyorder=2`
+- Post-processing: Savgol `window=31`, `polyorder=2` (hardcoded); postproc grid search available via `--eval-postproc`
 - CV RMSE: `13.948 ± 0.764` (`−0.104` vs R3 14.052, std improved 0.868→0.764)
 - Official LB RMSE: TBD
 - Status: canonical active baseline
 - MLflow: `rogii-wellbore-tuning` / `b4_optuna_tuned`
 - Scripts: `scripts/run_tune.py` (new), `src/rogii/tuning.py` (new), `tests/test_tuning.py` (new)
+- Postproc: `PostprocConfig` in payload (ADR-025); `--eval-postproc` does grid search (ADR-026); predict auto-detects from payload (ADR-027)

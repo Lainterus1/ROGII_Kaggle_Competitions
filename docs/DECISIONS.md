@@ -1020,3 +1020,116 @@ The project originally used `docs/TASKS.md` as the current backlog and status tr
 - Linear issue: `ROG-26`
 - Linear issue: `ROG-27`
 - Linear issue: `ROG-28`
+
+---
+
+## ADR-025: PostprocConfig as immutable train/predict contract
+
+- **Date**: 2026-06-10
+- **Status**: Accepted
+- **Linear**: ROG-24
+
+### Context
+
+Post-processing (Savgol, TVT clipping) had hardcoded parameters (`window=31, polyorder=2`) in CLI defaults. Parameters were not saved in model payload, so predict could not reproduce the exact post-processing without manual CLI flags. Clipping bounds were computed from data percentiles but not stored as part of a formal config.
+
+### Decision
+
+Create `PostprocConfig` as an immutable `frozen=True` dataclass with `validate()`, `to_dict()`, `from_dict()`. Store in payload as `payload["postproc"]`. The config stores **numerical** clip bounds, not percentile specs — ensuring predict-time reproducibility without re-computing percentiles on test data.
+
+### Fields
+
+`PostprocConfig(savgol_window, savgol_polyorder, clip_lower, clip_upper, apply_order)`.
+
+### Validation
+
+- `savgol_window` is `None` or odd positive int
+- `savgol_window` > `savgol_polyorder`
+- `clip_lower` < `clip_upper` if both set
+- `apply_order` ∈ `{"clip_smooth", "smooth_clip"}`
+
+### Consequences
+
+- Train→predict reproducibility guaranteed via payload
+- Old paylaods without `postproc` key work as legacy
+- CLI flags still override payload postproc
+
+---
+
+## ADR-026: Grid search postproc lives in smoothing.py
+
+- **Date**: 2026-06-10
+- **Status**: Accepted
+- **Linear**: ROG-24
+
+### Context
+
+The old `evaluate_postprocessing()` lived in `train.py` with hardcoded grid parameters (`[5,11,17,25,31]` × `[2,3]`). Moving it to `smoothing.py` makes it reusable and testable.
+
+### Decision
+
+Extract into `smoothing.py`:
+- `PostprocParamGrid` — search specification
+- `generate_postproc_configs()` — generates all configs from grid
+- `evaluate_postproc_config()` — evaluates single config on OOF
+- `grid_search_postprocessing()` — full search, returns sorted results
+- `select_best_postproc(baseline, min_delta=0.01)` — guards against noise
+
+`train.py::evaluate_postprocessing()` delegates to these functions. Configurable grid via CLI (`--postproc-savgol-windows`, etc.).
+
+### Consequences
+
+- Clean separation: `smoothing.py` owns postproc evaluation logic
+- `train.py` has thin wrappers
+- Grid is configurable via CLI and YAML config
+
+---
+
+## ADR-027: Predict postproc priority — CLI → payload → legacy
+
+- **Date**: 2026-06-10
+- **Status**: Accepted
+- **Linear**: ROG-24
+
+### Context
+
+After `PostprocConfig` is stored in payload, predict needs clear rules for resolving the active configuration.
+
+### Decision
+
+Strict priority in `run_predict.py`:
+
+1. **Explicit CLI override** (`--savgol-window`, `--savgol-polyorder`, `--tvt-clip`, `--savgol-smooth`) → use CLI
+2. **`--no-postproc`** → disable all post-processing
+3. **Payload `postproc`** → use it if no CLI flags
+4. **Legacy defaults** → old payload without `postproc` uses CLI `--savgol-smooth` w=31 p=2
+
+### Consequences
+
+- Backward compatible: old payloads + `--savgol-smooth` still work
+- New payloads with `postproc` auto-apply without CLI
+- `--no-postproc` disables everything unconditionally
+
+---
+
+## ADR-028: Postproc MLflow logging
+
+- **Date**: 2026-06-10
+- **Status**: Accepted
+- **Linear**: ROG-24
+
+### Context
+
+Grid search results need to be logged for experiment tracking.
+
+### Decision
+
+- **Metrics**: `cv_rmse_best_postproc`
+- **Params**: `postproc_savgol_window`, `postproc_savgol_polyorder`, `postproc_clip_lower`, `postproc_clip_upper`, `postproc_apply_order`
+- **Artifacts**: `postproc_grid.csv`, `postproc_best_config.json`
+- Local `mlruns/` only. Remote server → ROG-25.
+
+### Consequences
+
+- All postproc experiments are reproducible from MLflow
+- Artifacts provide full grid search traceability

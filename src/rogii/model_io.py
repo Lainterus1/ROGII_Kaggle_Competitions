@@ -18,6 +18,7 @@ class PredictionContract:
     feature_columns: list[str] | None
     is_multi_seed: bool = False
     model_metadata: dict | None = None
+    postproc_config: Any = None
 
 
 def make_feature_flags(
@@ -71,8 +72,7 @@ def build_model_payload(
     train_wells: int | None = None,
     config_path: str | None = None,
     model_params: dict[str, Any] | None = None,
-    clip_lower: float | None = None,
-    clip_upper: float | None = None,
+    postproc_config: Any = None,
     tcn_state_dict: dict[str, Any] | None = None,
     tcn_target_scaler: Any = None,
     tcn_window_size: int | None = None,
@@ -120,10 +120,11 @@ def build_model_payload(
         "include_formation_plane": flags["include_formation_plane"],
         "include_z_drift": flags["include_z_drift"],
     }
-    if clip_lower is not None:
-        payload["clip_lower"] = clip_lower
-    if clip_upper is not None:
-        payload["clip_upper"] = clip_upper
+    if postproc_config is not None:
+        if hasattr(postproc_config, "to_dict"):
+            payload["postproc"] = postproc_config.to_dict()
+        elif isinstance(postproc_config, dict):
+            payload["postproc"] = postproc_config
     if model_type == "tcn":
         payload["tcn_state_dict"] = tcn_state_dict
         payload["tcn_target_scaler"] = tcn_target_scaler
@@ -214,6 +215,7 @@ def resolve_prediction_contract(
         feature_columns=feature_columns,
         is_multi_seed=is_multi_seed,
         model_metadata=model_metadata,
+        postproc_config=payload.get("postproc"),
     )
 
 
