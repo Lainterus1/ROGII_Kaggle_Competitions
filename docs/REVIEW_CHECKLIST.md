@@ -38,6 +38,7 @@ Review every meaningful change for:
 | Dependencies | No heavy dependency added without approval |
 | Artifacts | No raw data, outputs, submissions, models, secrets or `mlruns/` staged |
 | Docs | Source-of-truth docs updated only where ownership requires it |
+| Code quality | Efficiency, readability, interpretability and compactness checked per `code-review` skill |
 
 Optimization boundaries:
 

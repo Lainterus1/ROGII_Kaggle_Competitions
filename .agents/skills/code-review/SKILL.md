@@ -39,12 +39,13 @@ Do not use it as permission to rewrite unrelated code. Review first; propose or 
 3. Inspect only files relevant to the review target.
 4. Check architecture boundaries: `src/rogii/` for reusable logic, `scripts/` for entry points, notebooks thin.
 5. Check project contracts: data schema, metric, submission, validation, leakage and runtime paths.
-6. Check tests: coverage for changed behavior, meaningful assertions, and expected commands run.
-7. Check error handling and edge cases: missing files, NaNs, non-finite predictions, row order, group overlap.
-8. Check performance-sensitive paths: avoid unnecessary full-data loads, repeated CSV reads, or excessive artifacts.
-9. Check dependency changes: no heavy or paid dependencies without approval.
-10. Check documentation impact with `documentation-maintenance` rules.
-11. Produce findings before summaries or optimization suggestions.
+6. Check code quality: efficiency, readability, interpretability, compactness (see **Code quality checks** below).
+7. Check tests: coverage for changed behavior, meaningful assertions, and expected commands run.
+8. Check error handling and edge cases: missing files, NaNs, non-finite predictions, row order, group overlap.
+9. Check performance-sensitive paths: avoid unnecessary full-data loads, repeated CSV reads, or excessive artifacts.
+10. Check dependency changes: no heavy or paid dependencies without approval.
+11. Check documentation impact with `documentation-maintenance` rules.
+12. Produce findings before summaries or optimization suggestions.
 
 ## Findings format
 
@@ -63,6 +64,44 @@ If no findings are found, state that explicitly and list residual risks or unver
 - Minimal change scope.
 - Tests and commands match the changed behavior.
 - Documentation is updated only where ownership requires it.
+
+## Code quality checks
+
+### Efficiency
+
+| Check | Flag if |
+|---|---|
+| Vectorisation | Python row-loop (`iterrows`, `itertuples`, `for i in range(len(df))`) used where numpy/pandas vectorised op would work |
+| Duplicate computation | Same expensive operation (CSV read, `groupby`, merge, DWT, heavy transform) repeated without caching or passing result |
+| Memory | Unnecessary `.copy()`, `float64` where `float32` suffices for ML, large intermediates held after use |
+| IO | Data read from disk more than once in a single pipeline pass; path constructed via string concat instead of `pathlib` |
+
+### Readability
+
+| Check | Flag if |
+|---|---|
+| Naming | Single-letter names outside `X`, `Y`, `Z`, `i`/`j` in comprehensions; verbs used for non-functions; vague names (`data`, `tmp`, `result`) in broad scope |
+| Function length | Function body exceeds ~40 lines without clear reason (complex formula, single algorithm) |
+| Magic numbers | Numeric or string literals in function body that should be named constants or config parameters |
+| Docstrings | Public function in `src/rogii/` missing a one-line purpose docstring |
+
+### Interpretability
+
+| Check | Flag if |
+|---|---|
+| Feature traceability | Feature not registered in a feature-list constant (`features.py` or equivalent) or added without a clear name |
+| Prediction path | Raw data → features → predict → postprocess requires jumps across 4+ files to trace a single row |
+| Clever code | Nested comprehension with side-effects, `eval`/`exec`, dynamic `globals()` manipulation, metaprogramming without justification |
+| Implicit coupling | Function depends on module-level mutable state that is mutated elsewhere without passing through parameters |
+
+### Compactness
+
+| Check | Flag if |
+|---|---|
+| Dead code | Unused imports, commented-out blocks, deprecated functions with no callers |
+| Premature abstraction | Class or framework created for a single use-case or fewer than 3 call-sites |
+| Module bloat | Single module exceeds ~300 lines and mixes responsibilities that map to distinct existing modules |
+| Over-engineering | Config or parameter surface wider than any current consumer needs |
 
 ## Optimization boundaries
 
@@ -90,6 +129,7 @@ If no findings are found, state that explicitly and list residual risks or unver
 
 ## Completion checklist
 
+- [ ] Code quality criteria checked (efficiency, readability, interpretability, compactness).
 - [ ] Relevant docs inspected.
 - [ ] Architecture boundaries checked.
 - [ ] Data, metric, validation and submission contracts checked when relevant.

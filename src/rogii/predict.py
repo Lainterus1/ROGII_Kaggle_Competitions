@@ -12,6 +12,29 @@ from rogii.model_io import validate_feature_columns
 from rogii.models import parse_submission_id
 
 
+def _collect_row_predictions(
+    sample: pd.DataFrame,
+    models: list,
+    well_features: dict[str, pd.DataFrame],
+    baseline_cache: dict[str, np.ndarray],
+    residual_target: bool,
+) -> list[float]:
+    predictions: list[float] = []
+    for submission_id in sample["id"].astype(str):
+        well_id, row_index = parse_submission_id(submission_id)
+        feats = well_features[well_id]
+        if row_index < 0 or row_index >= len(feats):
+            raise IndexError(f"Submission row index out of bounds for {submission_id}")
+        row_feats = feats.iloc[row_index : row_index + 1]
+        pred = float(np.mean([m.predict(row_feats)[0] for m in models]))
+        if residual_target:
+            pred = baseline_cache[well_id][row_index] + pred
+        if not np.isfinite(pred):
+            raise ValueError(f"Non-finite prediction for {submission_id}: {pred}")
+        predictions.append(pred)
+    return predictions
+
+
 def run_predict(
     data_dir: str | Path,
     models: list,
@@ -46,6 +69,7 @@ def run_predict(
             include_gr_dwt=include_gr_dwt,
             include_trajectory=include_trajectory,
             include_typewell=include_typewell,
+            include_spatial=include_spatial,
             include_dtw=include_dtw,
             include_geology=include_geology,
             include_beam=include_beam,
@@ -58,7 +82,6 @@ def run_predict(
 
     well_cache: dict[str, pd.DataFrame] = {}
     baseline_cache: dict[str, np.ndarray] = {}
-    predictions: list[float] = []
 
     for submission_id in sample["id"].astype(str):
         well_id, row_index = parse_submission_id(submission_id)
@@ -85,17 +108,8 @@ def run_predict(
             if residual_target:
                 baseline = compute_baseline(horizontal, method=baseline_method)
                 baseline_cache[well_id] = baseline
-        feats = well_cache[well_id]
-        if row_index < 0 or row_index >= len(feats):
-            raise IndexError(f"Submission row index out of bounds for {submission_id}")
-        row_feats = feats.iloc[row_index : row_index + 1]
-        pred = float(np.mean([m.predict(row_feats)[0] for m in models]))
-        if residual_target:
-            pred = baseline_cache[well_id][row_index] + pred
-        if not np.isfinite(pred):
-            raise ValueError(f"Non-finite prediction for {submission_id}: {pred}")
-        predictions.append(pred)
 
+    predictions = _collect_row_predictions(sample, models, well_cache, baseline_cache, residual_target)
     return pd.DataFrame({"id": sample["id"].astype(str), "tvt": predictions})
 
 
@@ -109,6 +123,7 @@ def _run_predict_with_spatial(
     include_gr_dwt: bool = False,
     include_trajectory: bool = False,
     include_typewell: bool = False,
+    include_spatial: bool = False,
     include_dtw: bool = False,
     include_geology: bool = False,
     include_beam: bool = False,
@@ -147,6 +162,7 @@ def _run_predict_with_spatial(
             include_dtw=include_dtw,
             include_geology=include_geology,
             include_beam=include_beam,
+            include_z_drift=include_z_drift,
         )
         if include_spatial:
             query_coords = feats[["X", "Y", "Z"]]
@@ -162,25 +178,11 @@ def _run_predict_with_spatial(
             baseline = compute_baseline(horizontal, method=baseline_method)
             baseline_cache[wid] = baseline
 
-    # Validate columns against the first well's features
     first_wid = test_well_ids[0] if test_well_ids else None
     if first_wid is not None:
         validate_feature_columns(list(all_features[first_wid].columns), feature_columns)
 
-    predictions: list[float] = []
-    for submission_id in sample["id"].astype(str):
-        well_id, row_index = parse_submission_id(submission_id)
-        feats = all_features[well_id]
-        if row_index < 0 or row_index >= len(feats):
-            raise IndexError(f"Submission row index out of bounds for {submission_id}")
-        row_feats = feats.iloc[row_index : row_index + 1]
-        pred = float(np.mean([m.predict(row_feats)[0] for m in models]))
-        if residual_target:
-            pred = baseline_cache[well_id][row_index] + pred
-        if not np.isfinite(pred):
-            raise ValueError(f"Non-finite prediction for {submission_id}: {pred}")
-        predictions.append(pred)
-
+    predictions = _collect_row_predictions(sample, models, all_features, baseline_cache, residual_target)
     return pd.DataFrame({"id": sample["id"].astype(str), "tvt": predictions})
 
 
@@ -196,11 +198,9 @@ def predict_tcn(
     device: str = "cuda",
 ) -> pd.DataFrame:
     import torch
+    from rogii.sequence_features import build_sequence_features
 
-    if device == "cuda" and torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
+    device = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
 
     sample = read_sample_submission(data_dir)
     test_well_ids = list_well_ids(data_dir, "test")
@@ -213,22 +213,19 @@ def predict_tcn(
 
     for wid in test_well_ids:
         horizontal = read_horizontal_well(data_dir, "test", wid)
-        from rogii.sequence_features import build_sequence_features
         seq_df = build_sequence_features(horizontal)
         seq_df = seq_df[feature_columns]
         X = seq_df.to_numpy(dtype=np.float64)
 
-        # Per-well normalization (same as training)
         mean = X.mean(axis=0, keepdims=True)
         std = X.std(axis=0, keepdims=True)
         std = np.where(std < 1e-8, 1.0, std)
         X = ((X - mean) / std).astype(np.float32)
 
-        # Apply global absolute-coordinate scaler (Phase 2 dual normalization)
         if input_scaler is not None:
             X_abs = horizontal[["X", "Y", "Z", "MD"]].to_numpy(dtype=np.float64)
             X_abs_scaled = input_scaler.transform(X_abs).astype(np.float32)
-            X = np.concatenate([X, X_abs_scaled], axis=1)  # (T, 65+4)
+            X = np.concatenate([X, X_abs_scaled], axis=1)
 
         if residual_target:
             well_baselines[wid] = compute_baseline(horizontal, method=baseline_method)
@@ -264,6 +261,8 @@ def predict_tcn(
     predictions: list[float] = []
     for submission_id in sample["id"].astype(str):
         well_id, row_index = parse_submission_id(submission_id)
+        if well_id not in well_preds:
+            raise KeyError(f"Well {well_id} from submission id {submission_id} not found in test data")
         preds = well_preds[well_id]
         if row_index < 0 or row_index >= len(preds):
             raise IndexError(f"Submission row index out of bounds for {submission_id}")
