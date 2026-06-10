@@ -14,6 +14,8 @@ from rogii.postprocess import (
 )
 from rogii.z_physics import apply_z_physics
 
+pytestmark = pytest.mark.experimental
+
 
 # ---------------------------------------------------------------------------
 # Synthetic data helpers

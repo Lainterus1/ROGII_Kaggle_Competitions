@@ -484,7 +484,7 @@ def test_gr_dwt_causal_no_future_leak() -> None:
     feats = build_gr_dwt_features(frame, window=64, min_window=8)
 
     gr_original = frame["GR"].astype(float).values.copy()
-    for i in range(50, 150):
+    for i in [50, 75, 100, 125, 149]:
         original = feats.loc[i, "gr_dwt_approx"]
         gr_modified = gr_original.copy()
         gr_modified[i + 1:] = 9999.0

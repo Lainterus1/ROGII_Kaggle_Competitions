@@ -1,0 +1,47 @@
+run:
+  name: b4_optuna_tuned
+  type: model_tuning
+  seed: 42
+  experiment_name: rogii-wellbore-tuning
+
+model:
+  type: lightgbm
+  params:
+    objective: regression
+    learning_rate: 0.05
+
+features:
+  set_name: r1_optimized
+  include_tvt_input: false
+  include_geometry: true
+  include_gr: true
+  include_gr_dwt: false
+  include_trajectory: false
+  include_typewell: false
+  include_spatial: false
+  include_dtw: false
+  include_geology: false
+  include_beam: false
+  include_formation_plane: false
+  include_z_drift: false
+  residual_target: true
+  baseline_method: flat
+
+tuning:
+  method: optuna
+  n_trials: 30
+  timeout_minutes: 120
+  cv_folds: 2              # screening (fast, noisy) — top-3 verified on 5-fold
+  n_seeds: 1
+  early_stopping_rounds: 50
+  pruning: true
+  seed: 42
+  cache_dir: outputs/cache  # disk cache for TrainData (hash-invalidated)
+  output_best_params: configs/b4_best_params.yaml
+
+validation:
+  strategy: group
+  n_splits: 5
+
+artifacts:
+  model_path: models/b4_tuned.pkl

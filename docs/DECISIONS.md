@@ -937,3 +937,86 @@ Stage B1 (Beam Search as LightGBM features) degraded CV to 14.43 because beam-de
 - **XGBoost first** — same architecture family as LightGBM (tree-based). No architecture diversity.
 - **Foundation models (TimesFM, PatchTST)** — promising in literature but heavy dependencies, unproven on this exact problem, higher risk than TCN.
 - **Soft-DTW differentiable loss** — complex, requires tslearn, no leader evidence of necessity.
+
+## ADR-020: Optuna for LightGBM Hyperparameter Optimization
+
+Date: 2026-06-10
+Status: Accepted
+
+### Context
+
+ROG-23 requires systematic hyperparameter tuning for LightGBM beyond fixed defaults. Current R3 uses `learning_rate=0.05`, `n_estimators=1000` with all other parameters at LightGBM defaults. Top leader solutions demonstrate that tuned hyperparameters yield meaningful CV/LB improvements.
+
+Two alternatives were considered:
+1. Grid search — straightforward but scales poorly (exponential in parameter count)
+2. Optuna with TPESampler — Bayesian optimization, sample-efficient, built-in pruning
+
+### Decision
+
+Use Optuna with:
+- **TPESampler**(seed=42) — Tree-structured Parzen Estimator for Bayesian optimization
+- **MedianPruner**(n_startup_trials=5, n_warmup_steps=10) — early termination of unpromising trials
+- Search space: learning_rate, num_leaves, min_child_samples, subsample, colsample_bytree, reg_alpha, reg_lambda, min_child_weight
+- Objective: 3-fold GroupKFold CV RMSE (reduced from 5 for speed)
+- Storage: in-memory (study object), best params exported to YAML
+
+### Consequences
+
+#### Positive
+- More efficient than grid search (100 trials vs thousands)
+- Built-in pruning saves compute on bad trials
+- Reproducible with fixed seed
+- Best params serializable to YAML for run_train.py consumption
+
+#### Negative
+- Adds `optuna>=3.0` dependency
+- Tuning runtime O(minutes) per trial × n_trials — ~30 min for 100 trials on GPU
+- MedianPruner may occasionally kill a promising trial early (acceptable tradeoff)
+
+#### Follow-up
+- Run `python scripts/run_tune.py --config configs/b4_tuned.yaml --data-dir data` to find best params
+- Update `configs/a4_multiseed.yaml` with tuned params if CV improves
+- Consider Optuna for TCN HPO when A5d is promoted from backlog
+
+## ADR-024: Linear MCP is the centralized task tracker
+
+Date: 2026-06-10
+Status: Accepted
+
+### Context
+
+The project originally used `docs/TASKS.md` as the current backlog and status tracker. The workflow now uses Linear through MCP for active tasks, blockers, status changes and next actions. Keeping both Linear and `docs/TASKS.md` current would create duplicate task state and stale instructions for agents.
+
+### Decision
+
+- Use Linear MCP (`ROG-*` issues) as the only current task and backlog source of truth.
+- Keep `docs/TASKS.md` as a read-only historical pre-Linear archive.
+- Do not backfill already completed historical tasks into Linear.
+- Assign Linear issues created or worked by an agent to that agent environment's authenticated Linear user from `linear_linear_getViewer`, unless the user explicitly requests another assignee.
+- Use `docs/TASK_TEMPLATE.md` only as issue-contract/checklist reference material for Linear descriptions.
+- Continue updating source-of-truth docs for durable facts: architecture, validation, metrics, data contracts, risks, roadmap stages, decisions and experiment results.
+
+### Consequences
+
+#### Positive
+
+- Agents have one operational place for current work, status, blockers and next actions.
+- Agent-owned work has a consistent visible owner in Linear.
+- Historical task context remains available without forcing a migration project.
+- Documentation drift is reduced because task status is not mirrored into markdown.
+
+#### Negative
+
+- Agents must use Linear MCP to know current work state; `docs/TASKS.md` is no longer sufficient.
+- Offline readers of the repository cannot see live backlog status without Linear access.
+
+#### Follow-up
+
+- Keep `.agents/skills/linear-issue-manager/SKILL.md` aligned with actual Linear labels, statuses and project IDs.
+- If Linear MCP schema changes, update the skill and `AGENTS.md` instead of reintroducing markdown task tracking.
+
+### Related
+
+- Linear issue: `ROG-26`
+- Linear issue: `ROG-27`
+- Linear issue: `ROG-28`

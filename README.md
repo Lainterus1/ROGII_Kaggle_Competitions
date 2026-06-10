@@ -16,6 +16,7 @@ GitHub-репозиторий: <https://github.com/Lainterus1/ROGII_Kaggle_Compe
 2. Хранить код, конфиги и документацию в GitHub-репозитории `ROGII_Kaggle_Competitions`.
 3. Запускать полные прогоны на Kaggle через тонкие runner-скрипты/ноутбуки.
 4. Отправлять проверенный `submission.csv` вручную после подтверждения пользователя.
+5. Вести текущие задачи, статусы и блокеры централизованно в Linear (`ROG-*`) через MCP; `docs/TASKS.md` остается историческим архивом.
 
 Команда для публичного клонирования:
 
@@ -62,6 +63,10 @@ python -m pip install -r requirements.txt
 Реализованные команды:
 
 ```bash
+# Fast local contract/unit loop. Skips expensive training smoke tests and retained experimental feature checks.
+python -m pytest tests -m "not slow and not integration and not experimental"
+
+# Full regression before handing off or changing model/validation/submission behavior.
 python -m pytest tests
 python scripts/make_data_inventory.py --data-dir data
 python scripts/run_naive_baseline.py --data-dir data --output outputs/submission.csv

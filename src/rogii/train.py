@@ -1,11 +1,14 @@
 """Training entry points for the ROGII ML baseline."""
 
-from dataclasses import dataclass
+import hashlib
+import json
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMRegressor
 from rogii.baseline import compute_baseline
 from rogii.data_loading import list_well_ids, read_horizontal_well, read_typewell
 from rogii.features import SAFE_NUMERIC_FEATURES, build_features, last_known_tvt_input_value, post_ps_mask
@@ -40,6 +43,47 @@ class TrainResult:
     clip_bounds: tuple[float, float] | None = None
     oof_df: "pd.DataFrame | None" = None
     tcn_metadata: dict | None = None
+    _train_data: Any = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class TrainData:
+    """Pre-built feature matrix with metadata — reusable across trials.
+
+    This container is immutable so a cached copy cannot be accidentally
+    mutated inside a tuning trial (which would leak between trials).
+    """
+
+    X: pd.DataFrame
+    y: np.ndarray
+    groups: np.ndarray
+    well_ids: list[str]
+    row_metadata: list[tuple[str, int]]
+    row_baselines: np.ndarray
+    feature_names: list[str]
+
+    # Frozen dataclass, so we use __post_init__ for derived attrs
+    def __post_init__(self) -> None:
+        if len(self.X) != len(self.y):
+            raise ValueError(f"X rows ({len(self.X)}) != y rows ({len(self.y)})")
+        if len(self.X) != len(self.groups):
+            raise ValueError(f"X rows ({len(self.X)}) != groups ({len(self.groups)})")
+
+    @property
+    def n_rows(self) -> int:
+        return len(self.X)
+
+    @property
+    def n_wells(self) -> int:
+        return len(np.unique(self.groups))
+
+
+# ---------------------------------------------------------------------------
+# Profiling helper
+# ---------------------------------------------------------------------------
+
+def _now() -> float:
+    return time.perf_counter()
 
 
 def _collect_train_post_ps(
@@ -57,7 +101,10 @@ def _collect_train_post_ps(
     include_z_drift: bool = False,
     residual_target: bool = False,
     baseline_method: str = "flat",
+    profile: bool = False,
 ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, list[str], list[tuple[str, int]], np.ndarray]:
+    t_start = _now()
+
     features_list: list[pd.DataFrame] = []
     targets: list[float] = []
     groups: list[int] = []
@@ -72,18 +119,25 @@ def _collect_train_post_ps(
 
     use_tvt_feature = include_tvt_input and not residual_target
 
+    t_csv_load = 0.0
+    t_feature_build = 0.0
+    t_baseline = 0.0
+
     for i, well_id in enumerate(well_ids):
         if (i + 1) % 100 == 0:
             print(f"  {i + 1}/{total} wells loaded, {len(targets)} rows collected")
+
+        t0 = _now()
         horizontal = read_horizontal_well(data_dir, "train", well_id)
+        t_csv_load += _now() - t0
+
         if "TVT" not in horizontal.columns:
             continue
         mask = post_ps_mask(horizontal)
         if not mask.any():
             continue
 
-        last_tvt = last_known_tvt_input_value(horizontal)
-
+        t1 = _now()
         typewell_frame = read_typewell(data_dir, "train", well_id) if (include_typewell or include_dtw or include_geology or include_beam) else None
 
         feats = build_features(
@@ -100,6 +154,8 @@ def _collect_train_post_ps(
             include_beam=include_beam,
             include_z_drift=include_z_drift,
         )
+        t_feature_build += _now() - t1
+
         post_feats = feats.loc[mask].copy()
         post_target = horizontal.loc[mask, "TVT"].astype(float)
 
@@ -111,6 +167,7 @@ def _collect_train_post_ps(
         post_target = post_target.loc[valid]
 
         # Compute baseline for reconstruction during post-processing evaluation
+        t2 = _now()
         baseline_vals = np.zeros(len(post_target), dtype=float)
         if residual_target:
             baseline = compute_baseline(horizontal, method=baseline_method)
@@ -120,6 +177,7 @@ def _collect_train_post_ps(
                 continue
             baseline_vals = baseline_post.to_numpy(dtype=float)
             post_target = post_target - baseline_post
+        t_baseline += _now() - t2
 
         # Track row index within the well for per-well post-processing
         masked_indices = horizontal.index[mask][valid]
@@ -136,11 +194,24 @@ def _collect_train_post_ps(
     if not features_list:
         raise ValueError("No train post-PS data found")
 
-    print(f"  Done: {well_index} wells, {len(targets)} post-PS rows")
+    t_concat = _now()
     X = pd.concat(features_list, ignore_index=True)
+    t_concat = _now() - t_concat
+
     y = np.array(targets, dtype=float)
     g = np.array(groups, dtype=int)
     row_baselines_arr = np.array(row_baselines, dtype=float)
+
+    t_total = _now() - t_start
+    print(f"  Done: {well_index} wells, {len(targets)} post-PS rows  [{t_total:.1f}s]")
+
+    if profile:
+        pct = lambda v: f"{v/t_total*100:.0f}%"
+        print(f"  [Profile] csv: {t_csv_load:.1f}s ({pct(t_csv_load)})  "
+              f"features: {t_feature_build:.1f}s ({pct(t_feature_build)})  "
+              f"baseline: {t_baseline:.1f}s ({pct(t_baseline)})  "
+              f"concat: {t_concat:.1f}s ({pct(t_concat)})")
+
     return X, y, g, well_ids_used, row_metadata, row_baselines_arr
 
 
@@ -365,6 +436,211 @@ def evaluate_postprocessing(
     return results
 
 
+def _print_postproc_results(results: list[PostprocResult]) -> None:
+    header = f"{'Label':<45} {'Raw':>8} {'PostProc':>10} {'Delta':>8}"
+    print(f"\n{header}")
+    print("-" * 75)
+    baseline = results[0].postproc_rmse
+    for r in results[:15]:
+        delta = r.postproc_rmse - baseline
+        print(f"{r.label:<45} {r.raw_rmse:8.4f} {r.postproc_rmse:10.4f} {delta:+8.4f}")
+
+
+# ---------------------------------------------------------------------------
+# LightGBM training helpers
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Disk cache for pre-built TrainData (hash-based, avoids recomputing features)
+# ---------------------------------------------------------------------------
+
+def _build_cache_key(
+    data_dir: str | Path,
+    feature_flags: dict[str, Any],
+) -> str:
+    raw = json.dumps({
+        "data_dir": str(Path(data_dir).resolve()),
+        **{k: feature_flags.get(k, False) for k in sorted(feature_flags)},
+    }, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _cache_dir_path(cache_dir: str | Path) -> Path:
+    return Path(cache_dir) / "train_data_cache"
+
+
+def _load_cached_data(cache_dir: str | Path, cache_key: str) -> "TrainData | None":
+    p = _cache_dir_path(cache_dir) / f"{cache_key}"
+    parquet_path = p / "X.parquet"
+    meta_path = p / "meta.npz"
+    if not parquet_path.exists() or not meta_path.exists():
+        return None
+
+    print(f"  [Cache] Loading pre-built TrainData from {p}")
+    X = pd.read_parquet(parquet_path)
+    meta = np.load(meta_path, allow_pickle=True)
+    return TrainData(
+        X=X,
+        y=meta["y"],
+        groups=meta["groups"],
+        well_ids=list(meta["well_ids"]),
+        row_metadata=list(meta["row_metadata"]),
+        row_baselines=meta["row_baselines"],
+        feature_names=list(meta["feature_names"]),
+    )
+
+
+def _save_cached_data(
+    cache_dir: str | Path, cache_key: str, data: "TrainData",
+) -> None:
+    p = _cache_dir_path(cache_dir) / f"{cache_key}"
+    p.mkdir(parents=True, exist_ok=True)
+
+    print(f"  [Cache] Saving TrainData to {p}")
+    data.X.to_parquet(p / "X.parquet", index=False)
+    np.savez_compressed(
+        p / "meta.npz",
+        y=data.y,
+        groups=data.groups,
+        well_ids=np.array(data.well_ids, dtype=object),
+        row_metadata=np.array(data.row_metadata, dtype=object),
+        row_baselines=data.row_baselines,
+        feature_names=np.array(data.feature_names, dtype=object),
+    )
+
+
+def _build_or_load_train_data(
+    data_dir: str | Path,
+    feature_flags: dict[str, Any],
+    cache_dir: str | Path | None = None,
+    profile: bool = False,
+) -> "TrainData":
+    if cache_dir is not None:
+        cache_key = _build_cache_key(data_dir, feature_flags)
+        cached = _load_cached_data(cache_dir, cache_key)
+        if cached is not None:
+            return cached
+
+    X, y, groups, well_ids, row_meta, baselines = _collect_train_post_ps(
+        data_dir, profile=profile, **feature_flags,
+    )
+
+    data = TrainData(
+        X=X,
+        y=y,
+        groups=groups,
+        well_ids=well_ids,
+        row_metadata=row_meta,
+        row_baselines=baselines,
+        feature_names=list(X.columns),
+    )
+
+    if cache_dir is not None:
+        cache_key = _build_cache_key(data_dir, feature_flags)
+        _save_cached_data(cache_dir, cache_key, data)
+
+    return data
+
+
+# ---------------------------------------------------------------------------
+
+def _import_lgbm():
+    import lightgbm as lgb
+    return lgb
+
+
+def _build_lgbm_params(
+    model_params: dict[str, Any] | None = None,
+    early_stopping_rounds: int | None = None,
+) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "objective": "regression",
+        "learning_rate": 0.05,
+        "verbose": -1,
+    }
+    if early_stopping_rounds is not None and early_stopping_rounds > 0:
+        base["n_estimators"] = 3000
+    else:
+        base["n_estimators"] = 1000
+    if model_params:
+        base.update(model_params)
+    return base
+
+
+def _fit_lgbm_single(
+    model,
+    X_train: np.ndarray | pd.DataFrame,
+    y_train: np.ndarray,
+    X_val: np.ndarray | pd.DataFrame | None = None,
+    y_val: np.ndarray | None = None,
+    early_stopping_rounds: int | None = None,
+) -> int:
+    lgb = _import_lgbm()
+    fit_kwargs: dict[str, Any] = {}
+    if (
+        X_val is not None
+        and y_val is not None
+        and early_stopping_rounds is not None
+        and early_stopping_rounds > 0
+    ):
+        fit_kwargs["eval_set"] = [(X_val, y_val)]
+        fit_kwargs["eval_metric"] = "rmse"
+        fit_kwargs["callbacks"] = [
+            lgb.early_stopping(early_stopping_rounds, verbose=False),
+        ]
+    model.fit(X_train, y_train, **fit_kwargs)
+    return int(getattr(model, "best_iteration_", model.n_estimators))
+
+
+def _make_validation_split(
+    X: pd.DataFrame,
+    y: np.ndarray,
+    groups: np.ndarray,
+    validation_fraction: float = 0.1,
+    seed: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    from sklearn.model_selection import GroupShuffleSplit
+    splitter = GroupShuffleSplit(
+        n_splits=1, test_size=validation_fraction, random_state=seed,
+    )
+    train_idx, val_idx = next(splitter.split(X, y, groups))
+    return train_idx, val_idx
+
+
+def _build_fold_features(
+    X: pd.DataFrame,
+    groups: np.ndarray,
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+    well_ids_used: list[str],
+    data_dir: str | Path,
+    include_spatial: bool = False,
+    include_formation_plane: bool = False,
+    global_fp_ref: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    X_tr = X.iloc[train_idx].copy()
+    X_val = X.iloc[val_idx].copy()
+
+    if include_spatial:
+        val_groups = set(groups[val_idx])
+        oof_wells = [wid for g, wid in enumerate(well_ids_used) if g not in val_groups]
+        X_tr_spatial = _spatial_fold_features(data_dir, X, train_idx, oof_wells)
+        X_val_spatial = _spatial_fold_features(data_dir, X, val_idx, oof_wells)
+        X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_spatial.reset_index(drop=True)], axis=1)
+        X_val = pd.concat([X_val.reset_index(drop=True), X_val_spatial.reset_index(drop=True)], axis=1)
+
+    if include_formation_plane and global_fp_ref is not None:
+        val_groups_fp = set(groups[val_idx])
+        oof_wells_fp = [wid for g, wid in enumerate(well_ids_used) if g not in val_groups_fp]
+        oof_ref = global_fp_ref[global_fp_ref["well_id"].isin(oof_wells_fp)]
+        X_tr_fp = _formation_plane_fold_features(X_tr, groups[train_idx], well_ids_used, oof_ref)
+        X_val_fp = _formation_plane_fold_features(X_val, groups[val_idx], well_ids_used, oof_ref)
+        X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_fp.reset_index(drop=True)], axis=1)
+        X_val = pd.concat([X_val.reset_index(drop=True), X_val_fp.reset_index(drop=True)], axis=1)
+
+    return X_tr, X_val
+
+
 def run_train(
     data_dir: str | Path,
     n_splits: int = 5,
@@ -388,39 +664,66 @@ def run_train(
     residual_target: bool = False,
     baseline_method: str = "flat",
     eval_postproc: bool = False,
+    early_stopping_rounds: int | None = 50,
+    validation_fraction: float = 0.1,
+    progress: bool = True,
+    mlflow_parent_run: Any | None = None,
+    preloaded_data: "TrainData | None" = None,
+    cache_dir: str | Path | None = None,
+    profile: bool = False,
 ) -> TrainResult:
-    X, y, groups, well_ids_used, row_metadata, row_baselines = _collect_train_post_ps(
-        data_dir,
-        include_tvt_input=include_tvt_input,
-        include_geometry=include_geometry,
-        include_gr=include_gr,
-        include_gr_dwt=include_gr_dwt,
-        include_trajectory=include_trajectory,
-        include_typewell=include_typewell,
-        include_spatial=include_spatial,
-        include_dtw=include_dtw,
-        include_geology=include_geology,
-        include_beam=include_beam,
-        include_z_drift=include_z_drift,
-        residual_target=residual_target,
-        baseline_method=baseline_method,
-    )
+    t_start = _now()
 
-    if model_params is None:
-        model_params = {}
+    tqdm = None
+    if progress:
+        try:
+            from tqdm import tqdm as _tqdm
+            tqdm = _tqdm
+        except ImportError:
+            progress = False
 
+    # --- Data: preloaded > disk-cache > collect ---
+    if preloaded_data is not None:
+        X = preloaded_data.X
+        y = preloaded_data.y
+        groups = preloaded_data.groups
+        well_ids_used = preloaded_data.well_ids
+        row_metadata = preloaded_data.row_metadata
+        row_baselines = preloaded_data.row_baselines
+        if profile:
+            print("  [Profile] Using preloaded TrainData (skipped data collection)")
+    else:
+        feature_flags = {
+            "include_tvt_input": include_tvt_input,
+            "include_geometry": include_geometry,
+            "include_gr": include_gr,
+            "include_gr_dwt": include_gr_dwt,
+            "include_trajectory": include_trajectory,
+            "include_typewell": include_typewell,
+            "include_spatial": include_spatial,
+            "include_dtw": include_dtw,
+            "include_geology": include_geology,
+            "include_beam": include_beam,
+            "include_z_drift": include_z_drift,
+            "residual_target": residual_target,
+            "baseline_method": baseline_method,
+        }
+        train_data = _build_or_load_train_data(
+            data_dir, feature_flags, cache_dir=cache_dir, profile=profile,
+        )
+        X = train_data.X
+        y = train_data.y
+        groups = train_data.groups
+        well_ids_used = train_data.well_ids
+        row_metadata = train_data.row_metadata
+        row_baselines = train_data.row_baselines
+
+    lgb = _import_lgbm()
     seeds = seed_list if seed_list else [42]
-
-    base_params: dict = {
-        "objective": "regression",
-        "learning_rate": 0.05,
-        "n_estimators": 1000,
-        "verbose": -1,
-    }
-    base_params.update(model_params)
+    base_params = _build_lgbm_params(model_params, early_stopping_rounds)
+    has_early_stop = early_stopping_rounds is not None and early_stopping_rounds > 0
 
     from rogii.validation import build_stratification_labels, create_cv_splitter
-
     cv_splitter = create_cv_splitter(cv_strategy, n_splits)
 
     strat_labels: np.ndarray | None = None
@@ -430,59 +733,68 @@ def run_train(
             n_tvt_bins=strat_tvt_bins,
             n_spatial_clusters=strat_spatial_clusters,
         )
-        # Expand per-well labels to per-row
         strat_labels_per_row = np.array([strat_labels[g] for g in groups], dtype=int)
     else:
         strat_labels_per_row = y
 
     strategy_label = "StratifiedGroupKFold" if cv_strategy == "stratified" else "GroupKFold"
     n_seeds = len(seeds)
-    print(f"[2/3] Training {n_splits}-fold {strategy_label} CV ({n_seeds} seed{'s' if n_seeds > 1 else ''}) on {len(y)} rows ...")
-    cv_scores: list[float] = []
-    oof_rows: list[tuple[str, int, int, float, float, float]] = []
+    n_rows = len(y)
+    es_str = f", early_stop={early_stopping_rounds}" if has_early_stop else ""
+    print(f"\n[2/3] {n_splits}-fold {strategy_label} CV | {n_seeds} seed(s) | {n_rows:,} rows{es_str}")
 
+    global_fp_ref: pd.DataFrame | None = None
     if include_formation_plane:
         from rogii.formation_plane import build_formation_reference
         global_fp_ref = build_formation_reference(data_dir, "train", well_ids_used)
 
-    for fold_idx, (train_idx, val_idx) in enumerate(cv_splitter.split(X, strat_labels_per_row, groups)):
-        print(f"  Fold {fold_idx + 1}/{n_splits} ...")
-        X_tr = X.iloc[train_idx].copy()
-        X_val = X.iloc[val_idx].copy()
+    cv_scores: list[float] = []
+    oof_rows: list[tuple[str, int, int, float, float, float]] = []
+    best_iterations: dict[int, dict[int, int]] = {}
+
+    fold_iter = enumerate(cv_splitter.split(X, strat_labels_per_row, groups))
+    if tqdm is not None:
+        fold_iter = tqdm(list(fold_iter), desc="  CV folds", unit="fold", ncols=100)
+
+    for fold_idx, (train_idx, val_idx) in fold_iter:
+        X_tr, X_val = _build_fold_features(
+            X, groups, train_idx, val_idx, well_ids_used, data_dir,
+            include_spatial=include_spatial,
+            include_formation_plane=include_formation_plane,
+            global_fp_ref=global_fp_ref,
+        )
         y_tr, y_val = y[train_idx], y[val_idx]
 
-        if include_spatial:
-            val_groups = set(groups[val_idx])
-            oof_wells = [wid for g, wid in enumerate(well_ids_used) if g not in val_groups]
-            X_tr_spatial = _spatial_fold_features(data_dir, X, train_idx, oof_wells)
-            X_val_spatial = _spatial_fold_features(data_dir, X, val_idx, oof_wells)
-            X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_spatial.reset_index(drop=True)], axis=1)
-            X_val = pd.concat([X_val.reset_index(drop=True), X_val_spatial.reset_index(drop=True)], axis=1)
-
-        if include_formation_plane:
-            val_groups_fp = set(groups[val_idx])
-            oof_wells_fp = [wid for g, wid in enumerate(well_ids_used) if g not in val_groups_fp]
-            oof_ref = global_fp_ref[global_fp_ref["well_id"].isin(oof_wells_fp)]
-            X_tr_fp = _formation_plane_fold_features(X_tr, groups[train_idx], well_ids_used, oof_ref)
-            X_val_fp = _formation_plane_fold_features(X_val, groups[val_idx], well_ids_used, oof_ref)
-            X_tr = pd.concat([X_tr.reset_index(drop=True), X_tr_fp.reset_index(drop=True)], axis=1)
-            X_val = pd.concat([X_val.reset_index(drop=True), X_val_fp.reset_index(drop=True)], axis=1)
-
+        fold_best_iters: dict[int, int] = {}
         fold_seed_preds: list[np.ndarray] = []
-        for seed_i, seed in enumerate(seeds):
+        seed_iter = enumerate(seeds)
+        if tqdm is not None and n_seeds > 1:
+            seed_iter = tqdm(list(seed_iter), desc=f"    seeds f{fold_idx+1}", unit="seed", leave=False, ncols=90)
+
+        for seed_i, seed in seed_iter:
             seed_params = dict(base_params)
             seed_params["random_state"] = seed
-            model = LGBMRegressor(**seed_params)
-            model.fit(X_tr, y_tr)
+            model = lgb.LGBMRegressor(**seed_params)
+            best_iter = _fit_lgbm_single(
+                model, X_tr, y_tr, X_val, y_val,
+                early_stopping_rounds=early_stopping_rounds if has_early_stop else None,
+            )
             y_pred_seed = model.predict(X_val)
             fold_seed_preds.append(y_pred_seed)
-            if n_seeds == 1:
-                print(f"    seed={seed}", end="")
+            fold_best_iters[seed] = best_iter
 
+        best_iterations[fold_idx] = fold_best_iters
         y_pred = np.mean(fold_seed_preds, axis=0)
         score = rmse(y_val, y_pred)
         cv_scores.append(score)
-        print(f"  Fold {fold_idx + 1} RMSE: {score:.6f}")
+
+        bi_str = ""
+        if has_early_stop and n_seeds == 1:
+            bi_str = f"  best_iter={list(fold_best_iters.values())[0]}"
+        elif has_early_stop:
+            avg_bi = int(np.mean(list(fold_best_iters.values())))
+            bi_str = f"  avg_best_iter={avg_bi}"
+        print(f"  Fold {fold_idx+1} RMSE: {score:.6f}{bi_str}")
 
         for fold_i, flat_idx in enumerate(val_idx):
             wid, row_idx = row_metadata[flat_idx]
@@ -493,27 +805,55 @@ def run_train(
                 float(row_baselines[flat_idx]),
             ))
 
-    print(f"[3/3] Training {n_seeds} final model{'s' if n_seeds > 1 else ''} on all data ...")
+    # --- Full-data features for final model ---
     if include_spatial:
         from rogii.spatial_features import build_pre_ps_reference, build_spatial_knn_features
         ref = build_pre_ps_reference(data_dir, "train", well_ids_used)
         spatial_feats = build_spatial_knn_features(ref, X[["X", "Y", "Z"]])
         X = pd.concat([X, spatial_feats], axis=1)
 
-    if include_formation_plane:
+    if include_formation_plane and global_fp_ref is not None:
         X_fp_final = _formation_plane_fold_features(X, groups, well_ids_used, global_fp_ref)
         X = pd.concat([X, X_fp_final], axis=1)
 
+    # --- Final model(s) on all data ---
+    n_models = n_seeds
+    print(f"\n[3/3] Training {n_models} final model(s) on all {n_rows:,} rows ...")
     final_models: list = []
-    for seed_i, seed in enumerate(seeds):
+    final_best_iters: list[int] = []
+
+    if has_early_stop and validation_fraction > 0 and len(np.unique(groups)) >= 2:
+        tr_idx, ho_idx = _make_validation_split(X, y, groups, validation_fraction, seeds[0])
+        X_final_train, y_final_train = X.iloc[tr_idx], y[tr_idx]
+        X_final_ho, y_final_ho = X.iloc[ho_idx], y[ho_idx]
+        print(f"  holdout for final ES: {len(ho_idx):,} rows ({len(np.unique(groups[ho_idx]))} wells)")
+    else:
+        X_final_train, y_final_train = X, y
+        X_final_ho, y_final_ho = None, None
+
+    seed_iter_final = enumerate(seeds)
+    if tqdm is not None:
+        seed_iter_final = tqdm(list(seed_iter_final), desc="  final models", unit="model", ncols=80)
+
+    for seed_i, seed in seed_iter_final:
         seed_params = dict(base_params)
         seed_params["random_state"] = seed
-        model = LGBMRegressor(**seed_params)
-        model.fit(X, y)
+        model = lgb.LGBMRegressor(**seed_params)
+        best_iter = _fit_lgbm_single(
+            model, X_final_train, y_final_train,
+            X_final_ho, y_final_ho,
+            early_stopping_rounds=early_stopping_rounds if has_early_stop else None,
+        )
         final_models.append(model)
+        final_best_iters.append(best_iter)
 
-    # Compute clipping bounds from train data
+    if has_early_stop:
+        bi_str = ", ".join(f"s{seeds[i]}={final_best_iters[i]}" for i in range(len(seeds)))
+        print(f"  final best_iter: [{bi_str}]")
+
+    # --- Post-processing evaluation ---
     clip_bounds: tuple[float, float] | None = None
+    postproc_results: list[PostprocResult] | None = None
     if eval_postproc:
         from rogii.smoothing import compute_tvt_clip_bounds
         try:
@@ -521,20 +861,16 @@ def run_train(
         except Exception:
             clip_bounds = None
 
-    postproc_results: list[PostprocResult] | None = None
     if eval_postproc and oof_rows:
         savgol_windows = [5, 11, 17, 25, 31]
         savgol_polyorders = [2, 3]
         clip_configs: list[tuple[float | None, float | None, str]] = [(None, None, "none")]
-
         if clip_bounds is not None:
             low, high = clip_bounds
             clip_configs = [
                 (None, None, "none"),
-                (low, high, f"p0.1-p99.9"),
+                (low, high, "p0.1-p99.9"),
             ]
-            # Also test tighter bounds
-            from rogii.smoothing import compute_tvt_clip_bounds
             try:
                 low_tight, high_tight = compute_tvt_clip_bounds(data_dir, 0.5, 99.5)
                 clip_configs.append((low_tight, high_tight, "p0.5-p99.5"))
@@ -542,23 +878,20 @@ def run_train(
                 clip_configs.append((low_wide, high_wide, "p1-p99"))
             except Exception:
                 pass
-
         postproc_results = evaluate_postprocessing(oof_rows, savgol_windows, savgol_polyorders, clip_configs)
+        _print_postproc_results(postproc_results)
 
-        print("\n--- Post-processing CV evaluation ---")
-        print(f"{'Label':<45} {'Raw':>8} {'PostProc':>10} {'Delta':>8}")
-        print("-" * 75)
-        for r in postproc_results[:15]:  # Top 15
-            delta = r.postproc_rmse - postproc_results[0].postproc_rmse
-            print(f"{r.label:<45} {r.raw_rmse:8.4f} {r.postproc_rmse:10.4f} {delta:+8.4f}")
+    if profile:
+        t_total = _now() - t_start
+        print(f"  [Profile] run_train total: {t_total:.1f}s")
 
-    return TrainResult(
+    result = TrainResult(
         models=final_models,
         seed_list=list(seeds),
         cv_rmse_mean=float(np.mean(cv_scores)),
         cv_rmse_std=float(np.std(cv_scores)),
         cv_rmse_folds=cv_scores,
-        train_rows=len(y),
+        train_rows=n_rows,
         train_wells=len(np.unique(groups)),
         feature_columns=list(X.columns),
         cv_strategy=cv_strategy,
@@ -568,6 +901,22 @@ def run_train(
         clip_bounds=clip_bounds,
         oof_df=_build_oof_per_well(oof_rows) if oof_rows else None,
     )
+    # Stash TrainData for potential reuse by tuning callers
+    if preloaded_data is not None:
+        object.__setattr__(result, "_train_data", preloaded_data)
+    else:
+        try:
+            td = TrainData(
+                X=X, y=y, groups=groups,
+                well_ids=well_ids_used,
+                row_metadata=row_metadata,
+                row_baselines=row_baselines,
+                feature_names=list(X.columns),
+            )
+            object.__setattr__(result, "_train_data", td)
+        except Exception:
+            pass
+    return result
 
 
 def _collect_train_sequences(

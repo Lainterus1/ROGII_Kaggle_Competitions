@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-06-10 - B4 Optuna-tuned baseline
+
+### Added
+- `scripts/run_tune.py` — CLI entry point for Optuna hyperparameter tuning.
+- `src/rogii/tuning.py` — Optuna TPESampler tuning with 2-fold screening + 5-fold top-3 verification, disk caching via `joblib.hash`.
+- `configs/b4_tuned.yaml` — tuning config: 30 trials, 120 min timeout, 2-fold screening.
+- `configs/b4_best_params.yaml` — best params: lr=0.0664, num_leaves=48, min_child_samples=60, subsample=0.716, colsample_bytree=0.733.
+- `tests/test_tuning.py` — tests for tuning pipeline, cache and config.
+
+### Changed
+- `src/rogii/train.py` — added `TuningRunner` integration; `run_train.py` supports `--best-params` to load tuned params.
+- `scripts/run_train.py` — added `--best-params` and `--use-tuned` CLI flags.
+- `configs/a4_multiseed.yaml` — updated to reference tuned param defaults.
+- `AGENTS.md` — updated active baseline to B4 (CV 13.948, LB TBD).
+- `docs/BASELINE_PLAN.md` — promoted B4 as canonical active baseline, moved R3 to superseded status.
+- `docs/ROADMAP.md` — updated current baseline to B4.
+- `docs/EXPERIMENT_LOG.md` — recorded B4 experiment: CV 13.948 ± 0.764 (−0.104 vs R3).
+- `docs/DECISIONS.md` — added ADR-020 Optuna HPO decision.
+- `docs/CHANGELOG.md` — this entry.
+
+### Verification
+- `python -m pytest tests` — 226 passed.
+- `python scripts/run_tune.py --config configs/b4_tuned.yaml --data-dir data` — completed 30 trials, top-3 verified on 5-fold.
+- Best params CV: 13.948 ± 0.764 vs R3 14.052 ± 0.868 (−0.104, std improved).
+- OOF + Savgol w=31 p=2: 13.965.
+
+## 2026-06-10 - Linear MCP task workflow
+
+### Changed
+- Made Linear MCP (`ROG-*` issues) the centralized source of truth for current tasks, status, blockers and next actions.
+- Marked `docs/TASKS.md` as a read-only historical pre-Linear archive with no backfill of old completed tasks.
+- Updated agent docs and workflow skills so future agents do not mirror Linear state into markdown.
+- Set the authenticated Linear user from `linear_linear_getViewer` as the default assignee for Linear issues created or worked by the agent.
+- Documented the Linear GraphQL PowerShell fallback for MCP optional-UUID validation failures and UTF-8-safe Russian issue content.
+
+### Verification
+- Docs-only change; no code tests required.
+
 ## 2026-06-08 - TCN tuning validation alignment
 
 ### Changed

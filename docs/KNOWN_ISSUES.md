@@ -37,8 +37,8 @@ Current issues that could affect correctness, reproducibility, data leakage, Kag
 | Open | A2a DWT CV→LB inversion | CV +0.06 (14.13) but LB +0.311 (12.558) vs R1. DWT features do not generalize to test set despite causal windows and GroupKFold | R3 remains active baseline; A2a artifacts preserved as historical candidate example |
 | Resolved | R1 offline Kaggle inference notebook used fragile dataset paths | `00-rogii-inference-r1` version 2 failed on `rogii-repo-v2` flat layout and produced no LB score | Version 3 uses marker-based path discovery and validated kernel output |
 | Resolved | A2a DWT model requires `pywavelets` during offline inference | `rogii-wheels-a2a-dwt` dataset created with pywavelets 1.8.0 wheel; Kaggle base env also has pywavelets 1.9.0 pre-installed | Kernel `00-rogii-inference-a2a-dwt` v1 validated — successful offline inference with DWT features |
-| Open | TCN Phase 0 prediction flattening | `a5_tcn_control` had global std_ratio `0.42` and CV `15.031`, worse than R3; per-well normalization removed absolute position signal | Run Phase 2 dual-normalization gate; target std_ratio `>0.7` and screening folds better than control |
-| Open | TCN fold abort / eval path divergence | Phase 0 aborted fold 5 and `tune_tcn.py` / `train_tcn()` still do not share a single evaluator | Complete A5 Phase 4 unified TCN evaluation path before promotion or Kaggle packaging |
+| Open | TCN Phase 0 prediction flattening | `a5_tcn_control` had global std_ratio `0.42` and CV `15.031`, worse than R3; per-well normalization removed absolute position signal | Run Phase 1 dual-normalization gate; target std_ratio `>0.7` and screening folds better than control |
+| Open | TCN fold abort / eval path divergence | Phase 0 aborted fold 5 and `tune_tcn.py` / `train_tcn()` still do not share a single evaluator | Complete A5 Phase 3 unified TCN evaluation path before promotion or Kaggle packaging |
 
 ## Open questions
 

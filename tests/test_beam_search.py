@@ -13,6 +13,8 @@ from rogii.beam_search import (
     _smooth_gr,
 )
 
+pytestmark = pytest.mark.experimental
+
 
 def test_beam_jit_basic():
     """Beam search returns path of correct length."""

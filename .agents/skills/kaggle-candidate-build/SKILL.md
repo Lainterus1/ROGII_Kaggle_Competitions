@@ -141,7 +141,7 @@ Update only relevant docs:
 
 | Event | Update |
 |---|---|
-| New candidate packaged | `docs/TASKS.md`, `docs/CHANGELOG.md` |
+| New candidate packaged | Linear issue result/status, `docs/CHANGELOG.md` if operationally relevant |
 | New workflow decision | `docs/DECISIONS.md` |
 | New blocker | `docs/KNOWN_ISSUES.md` |
 | Real CV/LB result | `docs/EXPERIMENT_LOG.md` |

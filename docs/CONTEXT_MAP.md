@@ -14,6 +14,7 @@ Documentation ownership boundaries, agent reading order and location map for key
 - Project structure changes.
 - Agent onboarding flow changes.
 - A document's ownership changes.
+- Task tracking ownership or Linear workflow changes.
 
 ## Do not store here
 
@@ -30,9 +31,10 @@ Recommended reading order for future agents:
 2. `docs/CONTEXT_MAP.md` for navigation and document ownership.
 3. `docs/ARCHITECTURE.md` for selected architecture and component boundaries.
 4. `docs/DECISIONS.md` for accepted decisions.
-5. `docs/TASKS.md` for current backlog.
+5. Linear MCP for current tasks, blockers, status and next actions.
 6. `docs/ROADMAP.md` for post-baseline development direction.
 7. `AGENTS.md` for agent operating rules, forbidden actions and completion-report format.
+8. `docs/TASKS.md` only when historical pre-Linear task context is useful.
 
 Repository and runtime locations:
 
@@ -44,6 +46,14 @@ Repository and runtime locations:
 | Kaggle competition data | `/kaggle/input` |
 | Kaggle outputs | `/kaggle/working` |
 
+Task tracking locations:
+
+| Need | Location |
+|---|---|
+| Current task backlog and status | Linear MCP, team `MLrs`, project `ROGII - Wellbore Geology Prediction`, `ROG-*` issues |
+| Linear workflow rules and issue templates | `.agents/skills/linear-issue-manager/SKILL.md` |
+| Historical completed/pre-Linear task archive | `docs/TASKS.md` |
+
 Document ownership:
 
 | File | Owns |
@@ -51,8 +61,9 @@ Document ownership:
 | `docs/PROJECT_CONTEXT.md` | Goal, users, scenarios, constraints, non-goals, success criteria |
 | `docs/ARCHITECTURE.md` | Architecture, components, boundaries, runtime assumptions |
 | `docs/DECISIONS.md` | Accepted decisions and rationale |
-| `docs/TASKS.md` | Current backlog and next actions |
-| `docs/TASK_TEMPLATE.md` | Copy-paste contract for future implementation tasks |
+| Linear MCP | Current backlog, task status, blockers and next actions |
+| `docs/TASKS.md` | Historical pre-Linear task archive; read-only for new work |
+| `docs/TASK_TEMPLATE.md` | Linear issue contract/checklist reference |
 | `docs/REVIEW_CHECKLIST.md` | Review criteria, optimization boundaries and refactoring approval rules |
 | `docs/CHANGELOG.md` | Chronological project changes |
 | `docs/KNOWN_ISSUES.md` | Known risks, blockers and unresolved issues |
@@ -71,7 +82,7 @@ Documentation maintenance policy:
 |---|---|
 | `AGENTS.md` | Concise documentation update rules and completion-report requirements |
 | `.agents/skills/documentation-maintenance/SKILL.md` | Detailed documentation maintenance workflow and update matrix |
-| `docs/TASK_TEMPLATE.md` | Per-task documentation impact section |
+| `docs/TASK_TEMPLATE.md` | Per-task Linear issue documentation impact section |
 
 Review and optimization protocol:
 

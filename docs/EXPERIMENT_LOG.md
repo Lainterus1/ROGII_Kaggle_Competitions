@@ -25,7 +25,8 @@ Run summaries, local CV scores, public leaderboard scores entered manually, feat
 Template for future entries:
 
 | Date | Run name | Model | Features | CV metric | Public LB | Config | Notes |
-|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|
+| 2026-06-10 | **B4 — Optuna-tuned LightGBM** | LightGBM (tuned) | R1 18 features, residual delta | **13.948 ± 0.764** (5-fold, delta) | TBD | `configs/a4_multiseed.yaml` + tuned params | ROG-23. Optuna TPESampler 30 trials, 2-fold screening → best verified on 5-fold. Params: lr=0.0664, num_leaves=48, min_child_samples=60, subsample=0.716, colsample_bytree=0.733. **Promoted as new baseline (−0.104 vs R3 14.052).** CV std improved 0.868→0.764. OOF + Savgol w=31 p=2: 13.965. MLflow: `rogii-wellbore-tuning` / `b4_optuna_tuned`. |
 | 2026-06-04 | naive_last_known_tvt_input | Rule baseline | Last non-null pre-PS `TVT_input` per well | RMSE `15.909853` on train post-PS rows | Not submitted | `configs/baseline_naive.yaml` | Generated and validated `outputs/submission.csv`; no MLflow run because this is a non-model smoke baseline |
 | 2026-06-04 | baseline_lgbm_safe_numeric | LightGBM | MD, X, Y, Z, GR, GR_is_missing, MD_delta, MD_relative, row_position | RMSE `120.06 ± 11.31` (GroupKFold 5) | Not submitted | `configs/baseline_lgbm.yaml` | Pure geometric baseline; deliberately excludes TVT_input to measure geometry-only signal |
 | 2026-06-04 | baseline_lgbm_tvt | LightGBM | safe_numeric_v1 + last_tvt_input (well-level constant) | RMSE `20.84 ± 3.24` (GroupKFold 5, local) | Not submitted | `configs/baseline_lgbm.yaml` | 5.8x improvement over geometry-only; local run on 3.78M post-PS rows, 773 wells |

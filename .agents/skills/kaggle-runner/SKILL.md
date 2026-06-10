@@ -207,7 +207,7 @@ Always verify with `kaggle datasets files <dataset>` after creation.
 
 - Update `docs/ARCHITECTURE.md` if runtime flow changes.
 - Update `docs/DECISIONS.md` for meaningful runner strategy changes.
-- Update `docs/TASKS.md` when Kaggle execution readiness changes.
+- Update the Linear issue when Kaggle execution readiness changes.
 - Update `README.md` if user-facing commands change.
 - Update `docs/EXPERIMENT_LOG.md` only after a meaningful run or after the user reports a real public LB score.
 

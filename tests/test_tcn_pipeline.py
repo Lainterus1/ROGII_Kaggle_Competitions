@@ -13,6 +13,25 @@ from rogii.predict import predict_tcn
 from rogii.model_io import build_model_payload, resolve_prediction_contract
 from rogii.tcn_model import TCNModel
 
+pytestmark = pytest.mark.slow
+
+
+@pytest.fixture(scope="module")
+def trained_tcn(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, TrainResult]:
+    data_dir = tmp_path_factory.mktemp("tcn_pipeline")
+    _write_synthetic_train_data(data_dir, n_wells=8)
+    result = train_tcn(
+        data_dir=str(data_dir),
+        window_size=8,
+        num_channels=(8, 16),
+        epochs=2,
+        batch_size=16,
+        n_splits=2,
+        seed=42,
+        device="cpu",
+    )
+    return data_dir, result
+
 
 def _write_synthetic_train_data(root: Path, n_wells: int = 8) -> None:
     (root / "train").mkdir(parents=True, exist_ok=True)
@@ -57,18 +76,8 @@ def _write_synthetic_train_data(root: Path, n_wells: int = 8) -> None:
     )
 
 
-def test_train_tcn_smoke(tmp_path: Path) -> None:
-    _write_synthetic_train_data(tmp_path, n_wells=8)
-    result = train_tcn(
-        data_dir=str(tmp_path),
-        window_size=8,
-        num_channels=(8, 16),
-        epochs=2,
-        batch_size=16,
-        n_splits=2,
-        seed=42,
-        device="cpu",
-    )
+def test_train_tcn_smoke(trained_tcn: tuple[Path, TrainResult]) -> None:
+    _, result = trained_tcn
     assert isinstance(result, TrainResult)
     assert len(result.models) == 1
     assert len(result.cv_rmse_folds) == 2
@@ -77,19 +86,8 @@ def test_train_tcn_smoke(tmp_path: Path) -> None:
     assert list(result.oof_df.columns) == ["well_id", "row_idx", "fold", "y_true", "y_pred", "baseline"]
 
 
-def test_tcn_model_io_roundtrip(tmp_path: Path) -> None:
-    _write_synthetic_train_data(tmp_path, n_wells=6)
-    result = train_tcn(
-        data_dir=str(tmp_path),
-        window_size=8,
-        num_channels=(8, 16),
-        epochs=2,
-        batch_size=16,
-        n_splits=2,
-        seed=42,
-        device="cpu",
-    )
-
+def test_tcn_model_io_roundtrip(tmp_path: Path, trained_tcn: tuple[Path, TrainResult]) -> None:
+    _, result = trained_tcn
     model = result.models[0].cpu()
     state_dict = {k: v for k, v in model.state_dict().items()}
     tcn_meta = result.tcn_metadata or {}
@@ -125,23 +123,13 @@ def test_tcn_model_io_roundtrip(tmp_path: Path) -> None:
     assert contract.model_metadata["input_scaler"] is not None  # Phase 2: x_scaler must be present
 
 
-def test_predict_tcn_smoke(tmp_path: Path) -> None:
-    _write_synthetic_train_data(tmp_path, n_wells=6)
-    result = train_tcn(
-        data_dir=str(tmp_path),
-        window_size=8,
-        num_channels=(8, 16),
-        epochs=3,
-        batch_size=16,
-        n_splits=2,
-        seed=42,
-        device="cpu",
-    )
+def test_predict_tcn_smoke(trained_tcn: tuple[Path, TrainResult]) -> None:
+    data_dir, result = trained_tcn
 
     model_cpu = result.models[0].cpu()
     meta = result.tcn_metadata or {}
     submission = predict_tcn(
-        data_dir=str(tmp_path),
+        data_dir=str(data_dir),
         model=model_cpu,
         scaler=None,
         window_size=8,
@@ -156,19 +144,9 @@ def test_predict_tcn_smoke(tmp_path: Path) -> None:
     assert not submission["tvt"].isna().any()
 
 
-def test_global_x_scaler_saved_in_metadata(tmp_path: Path) -> None:
+def test_global_x_scaler_saved_in_metadata(trained_tcn: tuple[Path, TrainResult]) -> None:
     """Phase 2: verify that train_tcn stores the global x_scaler in tcn_metadata."""
-    _write_synthetic_train_data(tmp_path, n_wells=6)
-    result = train_tcn(
-        data_dir=str(tmp_path),
-        window_size=8,
-        num_channels=(8, 16),
-        epochs=2,
-        batch_size=16,
-        n_splits=2,
-        seed=42,
-        device="cpu",
-    )
+    _, result = trained_tcn
     meta = result.tcn_metadata or {}
     assert "x_scaler" in meta, "Phase 2: tcn_metadata must contain x_scaler"
     from sklearn.preprocessing import StandardScaler
@@ -178,19 +156,9 @@ def test_global_x_scaler_saved_in_metadata(tmp_path: Path) -> None:
     assert meta["input_size"] == 69, f"Expected input_size=69 (65 seq + 4 abs), got {meta['input_size']}"
 
 
-def test_x_scaler_roundtrip_predict(tmp_path: Path) -> None:
+def test_x_scaler_roundtrip_predict(tmp_path: Path, trained_tcn: tuple[Path, TrainResult]) -> None:
     """Phase 2: train with x_scaler, save payload, load, predict — scaler must survive."""
-    _write_synthetic_train_data(tmp_path, n_wells=6)
-    result = train_tcn(
-        data_dir=str(tmp_path),
-        window_size=8,
-        num_channels=(8, 16),
-        epochs=3,
-        batch_size=16,
-        n_splits=2,
-        seed=42,
-        device="cpu",
-    )
+    data_dir, result = trained_tcn
 
     meta = result.tcn_metadata or {}
     assert meta.get("x_scaler") is not None
@@ -238,7 +206,7 @@ def test_x_scaler_roundtrip_predict(tmp_path: Path) -> None:
     tcn_model.load_state_dict(contract.model_metadata["state_dict"])
 
     submission = predict_tcn(
-        data_dir=str(tmp_path),
+        data_dir=str(data_dir),
         model=tcn_model,
         scaler=contract.model_metadata.get("target_scaler"),
         window_size=contract.model_metadata["window_size"],

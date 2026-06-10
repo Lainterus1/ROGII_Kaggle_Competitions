@@ -1,0 +1,10 @@
+model:
+  params:
+    colsample_bytree: 0.7327517621910145
+    learning_rate: 0.066393333427708
+    min_child_samples: 60
+    min_child_weight: 0.009633619715012382
+    num_leaves: 48
+    reg_alpha: 0.0015388289023185295
+    reg_lambda: 0.0004333826569382348
+    subsample: 0.7163728055902457

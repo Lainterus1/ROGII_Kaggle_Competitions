@@ -12,8 +12,15 @@ model:
   type: lightgbm
   params:
     objective: regression
-    learning_rate: 0.05
-    n_estimators: 1000
+    learning_rate: 0.0664
+    num_leaves: 48
+    min_child_samples: 60
+    subsample: 0.7164
+    colsample_bytree: 0.7328
+    reg_alpha: 0.001539
+    reg_lambda: 0.0004334
+    min_child_weight: 0.009634
+  early_stopping_rounds: 50
 
 features:
   set_name: r1_optimized

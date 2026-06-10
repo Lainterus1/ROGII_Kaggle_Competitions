@@ -7,6 +7,8 @@ import pytest
 from rogii.features import DTW_FEATURES, build_features, SAFE_NUMERIC_FEATURES
 from rogii.typewell_alignment import build_dtw_features, _dtw_path_from_cost
 
+pytestmark = pytest.mark.experimental
+
 
 def _make_horizontal(n_rows: int = 100, ps_at: int | None = None) -> pd.DataFrame:
     if ps_at is None:

@@ -2,23 +2,28 @@
 
 ## Purpose
 
-Track the current project backlog and next actions.
+Preserve the historical pre-Linear project backlog and completed-task timeline.
 
 ## Owns
 
-Actionable tasks, status, near-term priorities and explicit blockers.
+Historical task records created before Linear became the centralized task tracker.
 
 ## Update when
 
-- A step is completed.
-- New required work is discovered.
-- A task becomes blocked, cancelled or done.
+- The archival policy changes.
+- A historical entry needs factual correction.
+- A migration note needs to be clarified.
 
 ## Do not store here
 
 - Long technical explanations.
 - Experiment result details.
 - Architecture rationale that belongs in `DECISIONS.md`.
+- Current tasks, statuses, blockers or next actions. Use Linear MCP (`ROG-*` issues) instead.
+
+## Migration note
+
+As of 2026-06-10, current task tracking is centralized in Linear through MCP. Do not add new tasks or status updates here, and do not backfill old completed tasks into Linear. This file remains useful as a compact historical timeline for agents reconstructing project context.
 
 ## Current content
 
@@ -62,11 +67,11 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | **Stage A5a v0**: TCN tests — `test_sequence_features.py`, `test_tcn_model.py`, `test_tcn_pipeline.py` |
 | Done | High | **A5a Phase 0 (Diagnostics)**: TCN OOF by fold/position/well_length, prediction variance, RMSE by `frac_after_ps`, TCN vs LGBM OOF. Created `src/rogii/diagnostics.py`, `scripts/diagnose_tcn.py`, `tests/test_diagnostics.py` (14 tests). OOF contract + `fold` column. Key findings: RMSE 7.2→20.0 monotonic, std_ratio 0.42 flattening, error corr 0.76. Priority re-ranked: P2→P3→P4→P1→P5→P6. |
 | Done | High | **A5a Fixed Control Config**: run `channels=[32,64,128] window=64 kernel=5 lr=3e-4` — CV 15.03 (4 folds, fold 5 aborted), OOF saved to `outputs/oof/a5_tcn_control_tcn_oof.parquet` |
-| Done | High | **A5a Phase 2 (#1 priority)**: dual input normalization — per-well normalized (65 cols) + global-standardized absolute X/Y/Z/MD (4 cols). Fold-local `StandardScaler` fit on train folds only, final scaler saved in `tcn_metadata["x_scaler"]`, `predict_tcn()` applies saved scaler via `input_scaler` param. `tcn_input_size` stored in payload. `WellSequence.X_abs` added. 6 tests (2 new, 4 modified). Target: std_ratio 0.42 → >0.7. |
+| Done | High | **A5a Phase 1 (#1 priority)**: dual input normalization — per-well normalized (65 cols) + global-standardized absolute X/Y/Z/MD (4 cols). Fold-local `StandardScaler` fit on train folds only, final scaler saved in `tcn_metadata["x_scaler"]`, `predict_tcn()` applies saved scaler via `input_scaler` param. `tcn_input_size` stored in payload. `WellSequence.X_abs` added. 6 tests (2 new, 4 modified). Target: std_ratio 0.42 → >0.7. |
 | Done | Medium | **A5a TCN tuning validation alignment**: `scripts/tune_tcn.py` now uses fold-selectable 5-fold `GroupKFold`, dense validation RMSE monitoring and prints the final `run_train.py` command. Best tuned small TCN CV recorded as `15.036 ± 0.848`; not promoted. |
-| Planned | High | **A5a Phase 3 (#2 priority)**: R1 sequence channels — PS geometry, local trajectory, GR stable features, anchor/baseline, position masks. All causal/test-available, leakage audit. Target: screening folds close to 14.2–14.5. |
-| Planned | High | **A5a Phase 4 (#3 priority)**: unified TCN eval path — extract common CV/eval logic, `tune_tcn.py` delegates to evaluator, `run_train.py` uses same evaluator, TCN OOF saved. Fixes fold 5 abort. |
-| Planned | Low | **A5a Phase 1 (deprioritized)**: full-well `WellSequence` with target only on post-PS, window ending at target row, left-padding for short context, same windowing in `predict_tcn()`. Correctness fix — early post-PS rows already best (RMSE 7.2). |
+| Planned | High | **A5a Phase 2 (#2 priority)**: R1 sequence channels — PS geometry, local trajectory, GR stable features, anchor/baseline, position masks. All causal/test-available, leakage audit. Target: screening folds close to 14.2–14.5. |
+| Planned | High | **A5a Phase 3 (#3 priority)**: unified TCN eval path — extract common CV/eval logic, `tune_tcn.py` delegates to evaluator, `run_train.py` uses same evaluator, TCN OOF saved. Fixes fold 5 abort. |
+| Planned | Low | **A5a Phase 4 (deprioritized)**: full-well `WellSequence` with target only on post-PS, window ending at target row, left-padding for short context, same windowing in `predict_tcn()`. Correctness fix — early post-PS rows already best (RMSE 7.2). |
 | Planned | Medium | **A5a Phase 5 (Verify Loss)**: MSE baseline, `SmoothL1Loss` option, RMSE in TVT/delta scale, prediction dispersion check |
 | Planned | Medium | **A5a Phase 6 (Postprocess & Blend)**: TCN OOF saved, Savgol/clipping on TCN OOF, LGBM vs TCN error correlation, weighted blend LGBM+TCN OOF |
 | Planned | Medium | **Stage A5b**: implement standalone Beam/PF predictors — `beam_predictor.py`, `particle_filter.py`, OOF evaluation |
@@ -100,8 +105,16 @@ Actionable tasks, status, near-term priorities and explicit blockers.
 | Done | High | **PoP2 Phase 1**: Create `src/rogii/z_physics.py` (`apply_z_physics`), `src/rogii/gr_matcher.py` (`apply_dtw_matching`), `src/rogii/postprocess.py` (`apply_postprocess_blend`). 16 tests pass. |
 | Done | High | **PoP2 Phase 2**: Integrate into `scripts/run_predict.py` (`--postprocess-blend`, `--blend-weights` flags). Blend runs between `run_predict()` and Savgol/clip. |
 | Rejected | High | **PoP2 Evaluate**: OOF CV 53.94 (+39.72 vs Model 14.22). Z-physics (111) and DTW (145) are weak standalone predictors — blend degrades model. Code behind `--postprocess-blend` flag. Same pattern as all physics/alignment experiments. |
+| Done | High | **ROG-23 Phase 0**: Refactor `train.py` — extract `_fit_lgbm_single()`, `_build_lgbm_params()`, `_build_fold_features()`, `_make_validation_split()`. Code audit: removed hardcoded params, lazy LGBM import, typed helpers. |
+| Done | High | **ROG-23 Phase 1**: Training progress monitoring — `tqdm` progress bars for CV folds + seeds, Rich Table for final summary (`scripts/run_train.py:_report_results`). |
+| Done | High | **ROG-23 Phase 2**: Early stopping in `run_train()` — `early_stopping_rounds` param (default 50), `eval_set` in CV loop, `GroupShuffleSplit` holdout for final model, `best_iteration_` tracking. |
+| Done | Medium | **ROG-23 Phase 3**: Custom objective support — `huber`, `quantile`, `tweedie` via `model_params["objective"]`. Config-driven, no new CLI flags needed. |
+| Done | High | **ROG-23 Phase 4**: Optuna hyperparameter tuning — `src/rogii/tuning.py` (TPESampler + MedianPruner, 8-param search space), `scripts/run_tune.py` (CLI with MLflow), `configs/b4_tuned.yaml`. |
+| Done | High | **ROG-23 Phase 5**: Tests + docs — `tests/test_tuning.py` (7 tests), `test_train.py` (+4 tests: ES, huber, quantile). ADR-020 in DECISIONS.md. All 237 tests pass. |
+| Pending | High | **ROG-23 Training**: Run `python scripts/run_tune.py --config configs/b4_tuned.yaml --data-dir data` to find optimal params; retrain R3 with tuned params; compare CV/LB; update `docs/EXPERIMENT_LOG.md`. |
+| Done | High | **ROG-23 Verify & Promote**: Top-3 verified on 5-fold CV. Trial 19 best: CV 13.948 ± 0.764 (−0.104 vs R3 14.052). Promoted as **B4** — new baseline. Params: lr=0.0664, leaves=48, min_child=60, subsample=0.716, colsample=0.733, reg_α=0.00154, reg_λ=0.000433, min_child_w=0.0096. Updated `configs/a4_multiseed.yaml`.
 
 ## Open questions
 
-- A5 Phase 2 gate result will determine whether A5b/A5c remain planned or are re-prioritized.
+- A5 Phase 1 gate result will determine whether A5b/A5c remain planned or are re-prioritized.
 - Stage-specific blockers are tracked in `docs/ROADMAP.md` and `docs/KNOWN_ISSUES.md`.

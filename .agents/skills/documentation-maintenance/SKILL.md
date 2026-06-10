@@ -26,7 +26,8 @@ Do not use it for pure formatting, test-only refactors or temporary debugging ch
 - `docs/TASK_TEMPLATE.md`
 - `docs/CHANGELOG.md`
 - `docs/DECISIONS.md`
-- `docs/TASKS.md`
+- Linear MCP for current task status and backlog
+- `docs/TASKS.md` as historical archive only
 - Domain-specific docs under `docs/`
 
 ## Procedure
@@ -36,7 +37,7 @@ Do not use it for pure formatting, test-only refactors or temporary debugging ch
 3. Update the smallest relevant section in that document.
 4. Add an ADR in `docs/DECISIONS.md` only for meaningful decisions with alternatives or long-lived consequences.
 5. Update `docs/CHANGELOG.md` only for user-visible or operationally relevant changes.
-6. Update `docs/TASKS.md` when backlog status or next actions change.
+6. Update the Linear issue when backlog status, blockers or next actions change.
 7. If no docs update is needed, record the reason in the completion report.
 8. Re-check docs for duplicated facts and stale `TBD`/placeholder statements.
 
@@ -47,7 +48,8 @@ Do not use it for pure formatting, test-only refactors or temporary debugging ch
 | Data schema, file layout, target, ID or leakage fact | `docs/DATA_MAP.md`, `docs/KNOWN_ISSUES.md` if risk remains | The task only changes code formatting |
 | Metric implementation or metric confirmation | `docs/METRICS.md` | Tests are refactored without metric behavior changes |
 | Validation split, group rules or leakage controls | `docs/VALIDATION_STRATEGY.md`, `docs/DECISIONS.md` if significant | A helper is renamed without behavior change |
-| Baseline stage, runnable command or acceptance criteria | `docs/BASELINE_PLAN.md`, `docs/TASKS.md`, `README.md` if user-facing | Internal code cleanup with same commands |
+| Task status, backlog ordering, blocker or next action | Linear MCP only | The fact is historical context already captured elsewhere |
+| Baseline stage, runnable command or acceptance criteria | `docs/BASELINE_PLAN.md`, `README.md` if user-facing, Linear issue result/status | Internal code cleanup with same commands |
 | Experiment run | `docs/EXPERIMENT_LOG.md` and MLflow | Dry-run or failed command with no useful result |
 | Public notebook idea adopted | `docs/PUBLIC_NOTEBOOK_REFERENCES.md`, optionally `docs/DECISIONS.md` | Notebook only reviewed and no idea used |
 | Architecture boundary or project structure | `docs/ARCHITECTURE.md`, `docs/CONTEXT_MAP.md`, `docs/DECISIONS.md` if meaningful | A file moves inside the same owned component without contract change |
@@ -59,6 +61,7 @@ Do not use it for pure formatting, test-only refactors or temporary debugging ch
 
 - Update the smallest relevant section.
 - Do not duplicate the same fact across many docs.
+- Do not mirror Linear issue state into `docs/TASKS.md`; it is historical.
 - Do not append generic summaries.
 - Prefer tables for contracts and ownership.
 - Prefer ADR entries for important decisions.
@@ -75,7 +78,7 @@ Do not use it for pure formatting, test-only refactors or temporary debugging ch
 ## Completion checklist
 
 - [ ] Each changed fact has exactly one source-of-truth home.
-- [ ] `docs/TASKS.md` reflects completed or newly discovered work.
+- [ ] Linear issue reflects completed or newly discovered current work.
 - [ ] `docs/CHANGELOG.md` includes only operationally relevant changes.
 - [ ] Stale `TBD` statements were removed or kept with a reason.
 - [ ] Completion report explains updated, skipped or deferred docs.

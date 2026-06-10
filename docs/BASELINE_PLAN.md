@@ -26,7 +26,8 @@ Baseline sequence, model scope, feature safety rules, acceptance criteria and fu
 Baseline status:
 
 - Stage 4 is frozen as the reference baseline.
-- **R3** = 3-seed ensemble [42,7,123] (18 tabular features, residual target) + Savgol w=31 p=2 — **canonical active baseline** (CV 14.052, LB 12.177).
+- **B4** = Optuna-tuned 3-seed LightGBM ensemble [42,7,123] (18 R1 tabular features, residual delta target) + Savgol w=31 p=2 — **canonical active baseline** (CV 13.948, LB TBD). Tuned via Optuna TPESampler 30 trials, 2-fold screening → top-3 verified on 5-fold. Params: lr=0.0664, num_leaves=48, min_child_samples=60, subsample=0.716, colsample_bytree=0.733. CV std improved 0.868→0.764 vs R3. OOF + Savgol: 13.965.
+- **R3** = 3-seed ensemble [42,7,123] (18 tabular features, residual target) + Savgol w=31 p=2 (CV 14.052, LB 12.177) — superseded by B4.
 - R2 = R1 model + Savgol w=31 p=2 (OOF 14.21, LB 12.239).
 - R1 = raw 18-feature LightGBM model without post-processing (OOF 14.22, LB 12.247).
 - Future improvement planning has moved to `docs/ROADMAP.md`.
@@ -110,4 +111,17 @@ Kaggle run R3 / A4 multi-seed (2026-06-07):
 - Post-processing: Savgol `window=31`, `polyorder=2`
 - CV RMSE: `14.052 ± 0.868`
 - Official LB RMSE: **`12.177`**
+- Status: superseded by B4
+
+Kaggle run B4 / Optuna-tuned (2026-06-10):
+
+- Config: `configs/b4_tuned.yaml`, best params: `configs/b4_best_params.yaml`
+- Model: Optuna-tuned 3-seed LightGBM ensemble `[42, 7, 123]`, 18 R1 features, residual delta target
+- Tuning: Optuna TPESampler, 30 trials, 2-fold screening, top-3 verified on 5-fold
+- Best params: `lr=0.0664`, `num_leaves=48`, `min_child_samples=60`, `subsample=0.716`, `colsample_bytree=0.733`, `min_child_weight=0.0096`, `reg_alpha=0.0015`, `reg_lambda=0.0004`
+- Post-processing: Savgol `window=31`, `polyorder=2`
+- CV RMSE: `13.948 ± 0.764` (`−0.104` vs R3 14.052, std improved 0.868→0.764)
+- Official LB RMSE: TBD
 - Status: canonical active baseline
+- MLflow: `rogii-wellbore-tuning` / `b4_optuna_tuned`
+- Scripts: `scripts/run_tune.py` (new), `src/rogii/tuning.py` (new), `tests/test_tuning.py` (new)

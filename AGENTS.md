@@ -26,8 +26,9 @@ Your job is to build the best possible baseline without inventing data contracts
 | Navigation and doc ownership | `docs/CONTEXT_MAP.md` | Use to find the right source-of-truth file |
 | Architecture and boundaries | `docs/ARCHITECTURE.md` | Owns selected architecture and component responsibilities |
 | Accepted decisions | `docs/DECISIONS.md` | Add ADRs for meaningful decisions |
-| Current backlog | `docs/TASKS.md` | Keep actionable and current |
-| Task contract template | `docs/TASK_TEMPLATE.md` | Use for future implementation tasks |
+| Current tasks and backlog | Linear MCP (`ROG-*` issues) | Create, update and close current work here only |
+| Historical task archive | `docs/TASKS.md` | Read-only pre-Linear snapshot; do not add new task status here |
+| Task contract reference | `docs/TASK_TEMPLATE.md` | Use as Linear issue content/checklist guidance |
 | Review checklist | `docs/REVIEW_CHECKLIST.md` | Use for task/diff/PR reviews |
 | Active risks | `docs/KNOWN_ISSUES.md` | Track blockers and unresolved concerns |
 | Data contract | `docs/DATA_MAP.md` | Update after real data inspection |
@@ -46,6 +47,7 @@ Your job is to build the best possible baseline without inventing data contracts
 3. If target, metric, schema, ID columns or submission contract are unknown, inspect official Kaggle sources and actual data files before implementation.
 4. Treat new data/schema observations as preliminary until `docs/DATA_MAP.md` is updated by the inventory workflow.
 5. Use public notebooks only as references; document any adopted idea in `docs/PUBLIC_NOTEBOOK_REFERENCES.md` and `docs/DECISIONS.md` when relevant.
+6. Use Linear MCP for current task status, backlog, blockers and next actions. Use `docs/TASKS.md` only as historical context.
 
 ## Work protocol
 
@@ -55,7 +57,9 @@ Your job is to build the best possible baseline without inventing data contracts
 4. Review: inspect diffs and ensure no data/artifacts/secrets are staged.
 5. Document: update source-of-truth docs when facts, decisions or risks changed.
 
-For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives a more specific contract.
+For every non-trivial new implementation, experiment, docs, infra or bug task, use the `linear-issue-manager` skill and track the work in Linear. If the user does not provide an issue, create one or ask for missing required fields. When the agent creates or works a Linear issue, set the assignee to the authenticated Linear user returned by `linear_linear_getViewer`, unless the user explicitly requests another assignee. Move the active issue to `In Progress`, record results in the issue, and close it when done. Do not duplicate new task status in `docs/TASKS.md`.
+
+Use `docs/TASK_TEMPLATE.md` only as a contract/checklist reference for Linear issue descriptions when the user gives no better structure.
 
 ## Architecture rules
 
@@ -109,8 +113,9 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 | Data/schema discovery | `docs/DATA_MAP.md` |
 | Metric confirmation or implementation change | `docs/METRICS.md` |
 | Validation strategy change | `docs/VALIDATION_STRATEGY.md`, `docs/DECISIONS.md` if significant |
-| Baseline stage change | `docs/BASELINE_PLAN.md`, `docs/TASKS.md` |
-| Roadmap stage or priority change | `docs/ROADMAP.md`, `docs/TASKS.md` |
+| Task creation, status, blocker or next action | Linear MCP only; do not update `docs/TASKS.md` |
+| Baseline stage change | `docs/BASELINE_PLAN.md`, Linear issue status/result |
+| Roadmap stage or priority change | `docs/ROADMAP.md`, Linear issue status/result |
 | Experiment run | `docs/EXPERIMENT_LOG.md` and MLflow |
 | Public notebook idea used | `docs/PUBLIC_NOTEBOOK_REFERENCES.md`, optionally `docs/DECISIONS.md` |
 | New blocker or risk | `docs/KNOWN_ISSUES.md` |
@@ -130,11 +135,13 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 - The change is internal implementation cleanup with no contract impact.
 - The change is pure formatting, test-only refactoring or temporary debugging.
 - The removed code was dead and had no user-visible or operational impact.
+- The change is only task status, backlog ordering or next action; record that in Linear instead of docs.
 
 ### Update style
 
 - Update the smallest relevant section.
 - Do not duplicate information across docs.
+- Do not mirror Linear issue state into `docs/TASKS.md`; that file is historical.
 - Prefer tables for contracts and ADR entries for decisions.
 - Keep changelog entries factual and short.
 - If no documentation update is needed, explain why in the completion report.
@@ -163,7 +170,7 @@ For new implementation tasks, use `docs/TASK_TEMPLATE.md` unless the user gives 
 
 - `kagglehub.dataset_upload()` is the correct Python tool for creating Kaggle datasets with directory structure. `kaggle datasets version -p` (CLI) skips subdirectories — never use it for repo datasets.
 - Kaggle Evaluation page wording: still needs cross-check when accessible.
-- Current active baseline is R3: 3-seed LightGBM `[42, 7, 123]` with R1 features + Savgol `w=31 p=2`, LB `12.177`.
+- Current active baseline is **B4**: Optuna-tuned LightGBM `[42, 7, 123]` with R1 features + Savgol `w=31 p=2`, CV `13.948`, LB TBD.
 - Current active development is A5 TCN. Phase 2 dual normalization is implemented but still needs the full/screening training gate before promotion.
 
 ## Completion report format

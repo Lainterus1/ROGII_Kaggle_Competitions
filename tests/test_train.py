@@ -27,6 +27,7 @@ def _write_synthetic_train_data(root: Path, n_wells: int = 8) -> None:
         df.to_csv(root / "train" / f"{well_id}__horizontal_well.csv", index=False)
 
 
+@pytest.mark.slow
 def test_run_train_single_seed(tmp_path: Path) -> None:
     """Single seed training returns one model."""
     _write_synthetic_train_data(tmp_path, n_wells=8)
@@ -43,6 +44,7 @@ def test_run_train_single_seed(tmp_path: Path) -> None:
     assert result.cv_rmse_mean > 0
 
 
+@pytest.mark.slow
 def test_run_train_multi_seed(tmp_path: Path) -> None:
     """Multi-seed training returns one model per seed."""
     _write_synthetic_train_data(tmp_path, n_wells=8)
@@ -58,6 +60,7 @@ def test_run_train_multi_seed(tmp_path: Path) -> None:
     assert len(result.cv_rmse_folds) == 3
 
 
+@pytest.mark.slow
 def test_run_train_default_seed(tmp_path: Path) -> None:
     """No seed_list defaults to [42]."""
     _write_synthetic_train_data(tmp_path, n_wells=8)
@@ -70,6 +73,7 @@ def test_run_train_default_seed(tmp_path: Path) -> None:
     assert len(result.models) == 1
 
 
+@pytest.mark.slow
 def test_run_train_stores_feature_columns(tmp_path: Path) -> None:
     """TrainResult includes feature column names."""
     _write_synthetic_train_data(tmp_path, n_wells=8)
@@ -85,6 +89,7 @@ def test_run_train_stores_feature_columns(tmp_path: Path) -> None:
     assert "TVT" not in result.feature_columns
 
 
+@pytest.mark.slow
 def test_multi_seed_ensemble_better_or_equal(tmp_path: Path) -> None:
     """CV std with multi-seed should be <= single seed std (usually better)."""
     _write_synthetic_train_data(tmp_path, n_wells=10)
@@ -104,3 +109,120 @@ def test_multi_seed_ensemble_better_or_equal(tmp_path: Path) -> None:
     assert len(result2.models) == 3
     # Multi-seed should have lower or equal CV std
     assert result2.cv_rmse_std <= result1.cv_rmse_std + 0.01
+
+
+@pytest.mark.slow
+def test_early_stopping_single_seed(tmp_path: Path) -> None:
+    """Early stopping should produce valid model with best_iteration < n_estimators."""
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+    result = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        residual_target=True,
+        early_stopping_rounds=10,
+        validation_fraction=0.2,
+    )
+    assert isinstance(result, TrainResult)
+    assert len(result.models) == 1
+    assert result.cv_rmse_mean > 0
+
+
+@pytest.mark.slow
+def test_early_stopping_disabled(tmp_path: Path) -> None:
+    """early_stopping_rounds=None should train without early stopping."""
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+    result = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        residual_target=True,
+        early_stopping_rounds=None,
+    )
+    assert result.cv_rmse_mean > 0
+
+
+@pytest.mark.slow
+def test_custom_objective_huber(tmp_path: Path) -> None:
+    """huber objective should train without error."""
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+    result = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        residual_target=True,
+        model_params={"objective": "huber", "alpha": 0.9},
+        early_stopping_rounds=10,
+    )
+    assert result.cv_rmse_mean > 0
+
+
+@pytest.mark.slow
+def test_custom_objective_quantile(tmp_path: Path) -> None:
+    """quantile objective should train without error."""
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+    result = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        residual_target=True,
+        model_params={"objective": "quantile", "alpha": 0.5},
+        early_stopping_rounds=10,
+    )
+    assert result.cv_rmse_mean > 0
+
+
+@pytest.mark.slow
+def test_preloaded_equivalence(tmp_path: Path) -> None:
+    """CV result must be identical with and without preloaded_data."""
+    from rogii.train import TrainData, _build_or_load_train_data
+
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+
+    feature_flags = {"residual_target": True, "baseline_method": "flat"}
+    train_data = _build_or_load_train_data(str(tmp_path), feature_flags, cache_dir=None)
+    assert isinstance(train_data, TrainData)
+
+    result_direct = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        early_stopping_rounds=10,
+        **feature_flags,
+    )
+
+    result_cached = run_train(
+        data_dir=str(tmp_path),
+        n_splits=3,
+        seed_list=[42],
+        early_stopping_rounds=10,
+        preloaded_data=train_data,
+        **feature_flags,
+    )
+
+    assert abs(result_direct.cv_rmse_mean - result_cached.cv_rmse_mean) < 1e-6
+    assert result_direct.feature_columns == result_cached.feature_columns
+    assert result_direct.train_rows == result_cached.train_rows
+    assert result_direct.train_wells == result_cached.train_wells
+    assert len(result_direct.cv_rmse_folds) == len(result_cached.cv_rmse_folds)
+
+
+def test_disk_cache_roundtrip(tmp_path: Path) -> None:
+    """TrainData saved to disk cache can be reloaded and produces same CV."""
+    from rogii.train import (
+        TrainData, _build_cache_key, _build_or_load_train_data,
+        _load_cached_data, _save_cached_data,
+    )
+
+    _write_synthetic_train_data(tmp_path, n_wells=10)
+    cache_root = tmp_path / "cache"
+    feature_flags = {"residual_target": True, "baseline_method": "flat"}
+
+    train_data = _build_or_load_train_data(str(tmp_path), feature_flags, cache_dir=str(cache_root))
+    key = _build_cache_key(str(tmp_path), feature_flags)
+    loaded = _load_cached_data(str(cache_root), key)
+    assert loaded is not None
+    assert loaded.n_rows == train_data.n_rows
+    assert loaded.n_wells == train_data.n_wells
+    np.testing.assert_array_equal(loaded.y, train_data.y)
+    np.testing.assert_array_equal(loaded.groups, train_data.groups)

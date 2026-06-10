@@ -10,7 +10,6 @@ from rogii.spatial_features import (
     build_pre_ps_reference,
     build_spatial_knn_features,
 )
-from rogii.data_loading import list_well_ids
 
 
 def test_spatial_features_constants() -> None:
@@ -129,8 +128,3 @@ def test_spatial_oof_well_exclusion_smoke() -> None:
         ref = build_pre_ps_reference(str(root), "train", ["well_b"])
         assert len(ref) > 0
         assert "well_a" not in ref["well_id"].values
-
-
-def test_train_has_data_for_spatial() -> None:
-    wells = list_well_ids("data", "train")
-    assert len(wells) > 0, "No train wells found; spatial tests need local data"

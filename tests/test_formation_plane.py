@@ -13,6 +13,8 @@ from rogii.formation_plane import (
     build_formation_plane_features,
 )
 
+pytestmark = pytest.mark.experimental
+
 
 def _make_train_well_df(well_id: str, x_off: float, y_off: float):
     """Synthetic horizontal well with 6 formation columns."""

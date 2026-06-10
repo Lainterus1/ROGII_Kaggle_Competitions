@@ -2,9 +2,12 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from rogii.features import GEOLOGY_FEATURES, build_features, SAFE_NUMERIC_FEATURES
 from rogii.geology_features import build_geology_features, _FORMATION_GR
+
+pytestmark = pytest.mark.experimental
 
 
 def _make_horizontal(n_rows: int = 100) -> pd.DataFrame:

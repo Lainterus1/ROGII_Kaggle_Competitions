@@ -1,6 +1,6 @@
-# Task Contract Template
+# Linear Issue Contract Template
 
-Use this template for future implementation tasks in this project. Keep each task narrow, verifiable and aligned with the current source-of-truth docs.
+Use this template as reference material for Linear issue descriptions in this project. Current task tracking lives in Linear MCP (`ROG-*` issues), not in `docs/TASKS.md`. Keep each issue narrow, verifiable and aligned with the current source-of-truth docs.
 
 ## Task
 
@@ -18,7 +18,8 @@ Use:
 - `docs/PROJECT_CONTEXT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/CONTEXT_MAP.md`
-- `docs/TASKS.md`
+- Current Linear issue via MCP
+- `docs/TASKS.md` only for historical pre-Linear context
 - `docs/DATA_MAP.md` for data/schema work
 - `docs/METRICS.md` for metric work
 - `docs/VALIDATION_STRATEGY.md` for split, leakage or CV work
@@ -59,14 +60,16 @@ Do not implement:
 ## Required Workflow
 
 1. Read relevant docs and skills.
-2. Identify minimal files to change.
-3. State a short implementation plan if the task is non-trivial.
-4. Implement the smallest correct change.
-5. Add or update tests.
-6. Run relevant checks.
-7. Check documentation impact.
-8. Inspect `git status`, `git diff`, and staged files before commit.
-9. Report assumptions and risks.
+2. Use `linear-issue-manager` to find or create the Linear issue and move it to `In Progress`.
+3. Identify minimal files to change.
+4. State a short implementation plan if the task is non-trivial.
+5. Implement the smallest correct change.
+6. Add or update tests.
+7. Run relevant checks.
+8. Check documentation impact.
+9. Update the Linear issue with result, blockers or follow-up status.
+10. Inspect `git status`, `git diff`, and staged files before commit.
+11. Report assumptions and risks.
 
 ## Required Checks
 
@@ -99,7 +102,8 @@ Use the project matrix:
 | Data/schema discovery | `docs/DATA_MAP.md` |
 | Metric confirmation or implementation change | `docs/METRICS.md` |
 | Validation strategy change | `docs/VALIDATION_STRATEGY.md`, `docs/DECISIONS.md` if significant |
-| Baseline stage change | `docs/BASELINE_PLAN.md`, `docs/TASKS.md` |
+| Task creation, status, blocker or next action | Linear MCP only |
+| Baseline stage change | `docs/BASELINE_PLAN.md`, Linear issue result/status |
 | Experiment run | `docs/EXPERIMENT_LOG.md` and MLflow |
 | Public notebook idea used | `docs/PUBLIC_NOTEBOOK_REFERENCES.md`, optionally `docs/DECISIONS.md` |
 | New blocker or risk | `docs/KNOWN_ISSUES.md` |

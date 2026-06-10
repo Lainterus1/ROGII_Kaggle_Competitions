@@ -96,15 +96,34 @@ def _resolve_tcn_config(args, model_cfg: dict[str, Any]) -> dict[str, Any]:
 
 def _report_results(result, output_model: str, mlflow_run, run_name: str,
                     model_type: str, save_oof: bool) -> None:
-    print(f"CV strategy: {result.cv_strategy}")
-    print(f"Seeds ({len(result.seed_list)}): {result.seed_list}")
-    print(f"Target mode: {'residual (delta)' if result.residual_target else 'direct (TVT)'}")
-    print(f"Feature columns ({len(result.feature_columns)}): {result.feature_columns}")
-    print(f"CV RMSE (mean ± std): {result.cv_rmse_mean:.6f} ± {result.cv_rmse_std:.6f}")
-    print(f"CV fold scores: {[round(s, 6) for s in result.cv_rmse_folds]}")
-    print(f"Train rows (post-PS): {result.train_rows}")
-    print(f"Train wells: {result.train_wells}")
-    print(f"Model saved: {output_model}")
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        console = Console()
+        table = Table(title=f"Training Results — {run_name}", title_style="bold cyan")
+
+        table.add_column("Metric", style="dim", width=28)
+        table.add_column("Value", style="bold")
+
+        table.add_row("CV strategy", result.cv_strategy)
+        table.add_row("Seeds", f"{result.seed_list} ({len(result.seed_list)})")
+        table.add_row("Target mode", "residual (delta)" if result.residual_target else "direct (TVT)")
+        table.add_row("Feature columns", str(len(result.feature_columns)))
+        table.add_row("Train rows (post-PS)", f"{result.train_rows:,}")
+        table.add_row("Train wells", str(result.train_wells))
+        table.add_row("Model saved", output_model)
+
+        table.add_section()
+        table.add_row("CV RMSE (mean ± std)", f"[bold green]{result.cv_rmse_mean:.6f}[/] ± {result.cv_rmse_std:.6f}")
+        for i, score in enumerate(result.cv_rmse_folds):
+            table.add_row(f"  Fold {i + 1}", f"{score:.6f}")
+
+        console.print(table)
+    except ImportError:
+        print(f"\nCV RMSE (mean \u00b1 std): {result.cv_rmse_mean:.6f} \u00b1 {result.cv_rmse_std:.6f}")
+        print(f"CV fold scores: {[round(s, 6) for s in result.cv_rmse_folds]}")
+        print(f"Train: {result.train_rows:,} rows, {result.train_wells} wells")
+        print(f"Model saved: {output_model}")
 
     metrics = {
         "cv_rmse_mean": result.cv_rmse_mean,
@@ -181,10 +200,14 @@ def parse_args() -> ArgumentParser:
                         help="Baseline construction method for residual target")
     parser.add_argument("--eval-postproc", action="store_true",
                         help="Evaluate Savgol smoothing + TVT clipping on OOF CV predictions")
+    parser.add_argument("--early-stopping-rounds", type=int, default=None,
+                        help="Early stopping rounds (default from config or 50)")
     parser.add_argument("--save-oof", action="store_true",
                         help="Save out-of-fold CV predictions to outputs/oof/")
     parser.add_argument("--model-type", default=None, choices=["lightgbm", "tcn"],
                         help="Model type: lightgbm (default) or tcn")
+    parser.add_argument("--model-params-json", default=None, type=str,
+                        help="JSON dict or @filepath to model params (e.g. '{\"num_leaves\":48}' or '@/tmp/params.json')")
     parser.add_argument("--tcn-channels", default=None, type=str,
                         help="TCN channel sizes, comma-separated (e.g. '64,128,256')")
     parser.add_argument("--tcn-window", type=int, default=None, help="TCN sliding window size")
@@ -231,6 +254,13 @@ def main() -> None:
     if not isinstance(model_params, dict):
         raise ValueError("Config section model.params must be a mapping")
     model_params = dict(model_params)
+    if args.model_params_json:
+        import json as _json
+        raw = args.model_params_json
+        if raw.startswith("@"):
+            raw = Path(raw[1:]).read_text(encoding="utf-8")
+        model_params.update(_json.loads(raw))
+    early_stopping_rounds = _val(args.early_stopping_rounds, model_cfg, "early_stopping_rounds", 50, int)
 
     # Feature flags (dict with all 12 feature keys + residual_target + baseline_method)
     ff = _resolve_feature_flags(args, feat_cfg)
@@ -246,6 +276,7 @@ def main() -> None:
         "model_type": model_type, "n_splits": n_splits, "n_seeds": len(seed_list),
         "seed_list": str(seed_list), "cv_strategy": cv_strategy,
         "residual_target": residual_target, "baseline_method": baseline_method,
+        "early_stopping_rounds": early_stopping_rounds,
         "config_file": args.config or "none",
         **ff,
         **{f"model_param_{k}": v for k, v in model_params.items()},
@@ -298,6 +329,7 @@ def main() -> None:
             residual_target=residual_target,
             baseline_method=baseline_method,
             eval_postproc=args.eval_postproc,
+            early_stopping_rounds=early_stopping_rounds,
             **ff,
         )
 

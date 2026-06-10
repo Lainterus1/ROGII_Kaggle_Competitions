@@ -13,7 +13,7 @@ Do not use it for trivial continuations where the next session shares full conte
 
 ## Inputs
 
-- Current `docs/TASKS.md` and `docs/CHANGELOG.md`.
+- Current Linear issue and `docs/CHANGELOG.md`.
 - Last commit hash and message.
 - Current git status.
 - Open questions and risks from `docs/KNOWN_ISSUES.md`.
@@ -22,7 +22,8 @@ Do not use it for trivial continuations where the next session shares full conte
 
 ## Source-of-truth files
 
-- `docs/TASKS.md`
+- Linear MCP (`ROG-*` issues) for current task state
+- `docs/TASKS.md` only for historical pre-Linear context
 - `docs/KNOWN_ISSUES.md`
 - `docs/DECISIONS.md`
 - `docs/CHANGELOG.md`
@@ -30,7 +31,7 @@ Do not use it for trivial continuations where the next session shares full conte
 
 ## Procedure — produce handoff
 
-1. Collect current goal: the task or step being worked on.
+1. Collect current goal: the Linear issue or step being worked on.
 2. List completed items with last commit hash.
 3. Identify in-progress work: what the next immediate action is, and whether anything is blocked.
 4. Note key decisions made in this session that are not yet in ADRs.
@@ -47,6 +48,7 @@ Do not use it for trivial continuations where the next session shares full conte
 
 ## Progress
 
+- Issue: [ROG-<id> and status]
 - Completed: [steps done, last commit hash]
 - In progress: [what was being worked on, blocked?]
 - Next: [immediate next action]
